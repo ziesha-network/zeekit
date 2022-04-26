@@ -1,98 +1,75 @@
+mod curve;
 pub mod gadget;
+use curve::*;
 
-use crate::{mimc, utils};
-use dusk_bytes::Serializable;
-use dusk_plonk::prelude::*;
+use crate::{mimc, Fr};
+use ff::PrimeField;
 use num_bigint::BigUint;
 use num_integer::Integer;
+use serde::{Deserialize, Serialize};
 use std::ops::*;
-use std::str::FromStr;
 
-lazy_static! {
-    pub static ref BASE: JubJubAffine = JubJubAffine::from_raw_unchecked(
-        BlsScalar::from_raw([
-            0x4df7b7ffec7beaca,
-            0x2e3ebb21fd6c54ed,
-            0xf1fbf02d0fd6cce6,
-            0x3fd2814c43ac65a6,
-        ]),
-        BlsScalar::from(18),
-    );
-    pub static ref ORDER: BigUint = BigUint::from_str(
-        "6554484396890773809930967563523245729705921265872317281365359162392183254199"
-    )
-    .unwrap();
-}
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone)]
 pub struct PrivateKey {
-    pub public_key: JubJubAffine,
-    randomness: BlsScalar,
-    scalar: JubJubScalar,
+    pub public_key: PointAffine,
+    pub randomness: Fr,
+    pub scalar: Fr,
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PublicKey(PointCompressed);
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Signature {
-    pub r: JubJubAffine,
-    pub s: JubJubScalar,
+    pub r: PointAffine,
+    pub s: Fr,
 }
 
-pub fn generate_keys(seed: Vec<BlsScalar>) -> PrivateKey {
-    let randomness = mimc::mimc(seed.clone());
-    let scalar = utils::bls_to_jubjub(mimc::mimc(vec![randomness]));
-    let point = JubJubExtended::from(*BASE) * scalar;
-    PrivateKey {
-        public_key: JubJubAffine::from(point),
-        randomness,
-        scalar,
-    }
+fn generate_keys(randomness: Fr, scalar: Fr) -> (PublicKey, PrivateKey) {
+    let point = BASE.multiply(&scalar);
+    let pk = PublicKey(point.compress());
+    (
+        pk.clone(),
+        PrivateKey {
+            public_key: point,
+            randomness,
+            scalar,
+        },
+    )
 }
-
-pub fn sign(sk: &PrivateKey, message: BlsScalar) -> Signature {
+fn sign(sk: &PrivateKey, message: Fr) -> Signature {
     // r=H(b,M)
-    let r = utils::bls_to_jubjub(mimc::mimc(vec![sk.randomness, message]));
+    let r = mimc::mimc(vec![sk.randomness, message]);
 
     // R=rB
-    let rr = JubJubAffine::from(JubJubExtended::from(*BASE) * r);
+    let rr = BASE.multiply(&r);
 
     // h=H(R,A,M)
-    let mut inp = Vec::new();
-    inp.push(rr.get_x());
-    inp.push(rr.get_y());
-    inp.push(sk.public_key.get_x());
-    inp.push(sk.public_key.get_y());
-    inp.push(message);
-    let h = utils::bls_to_jubjub(mimc::mimc(inp));
+    let h = mimc::mimc(vec![rr.0, rr.1, sk.public_key.0, sk.public_key.1, message]);
 
     // s = (r + ha) mod ORDER
-    let mut s = BigUint::from_bytes_le(&r.to_bytes());
-    let mut ha = BigUint::from_bytes_le(&h.to_bytes());
-    ha.mul_assign(&BigUint::from_bytes_le(&sk.scalar.to_bytes()));
+    let mut s = BigUint::from_bytes_le(r.to_repr().as_ref());
+    let mut ha = BigUint::from_bytes_le(h.to_repr().as_ref());
+    ha.mul_assign(&BigUint::from_bytes_le(sk.scalar.to_repr().as_ref()));
     s.add_assign(&ha);
     s = s.mod_floor(&*ORDER);
 
-    let mut s_data = [0u8; 32];
-    s_data.copy_from_slice(&s.to_bytes_le());
-
     Signature {
-        r: JubJubAffine::from(rr),
-        s: JubJubScalar::from_bytes(&s_data).unwrap(),
+        r: rr,
+        s: h, //FIX!
     }
 }
 
-pub fn verify(pk: JubJubAffine, msg: BlsScalar, sig: Signature) -> bool {
+fn verify(pk: &PublicKey, message: Fr, sig: &Signature) -> bool {
+    let pk = pk.0.decompress();
+
     // h=H(R,A,M)
-    let mut inp = Vec::new();
-    inp.push(sig.r.get_x());
-    inp.push(sig.r.get_y());
-    inp.push(pk.get_x());
-    inp.push(pk.get_y());
-    inp.push(msg);
-    let h = utils::bls_to_jubjub(mimc::mimc(inp));
+    let h = mimc::mimc(vec![sig.r.0, sig.r.1, pk.0, pk.1, message]);
 
-    let sb = JubJubExtended::from(*BASE) * sig.s;
+    let sb = BASE.multiply(&sig.s);
 
-    let r_plus_ha = JubJubExtended::from(pk) * h + sig.r;
+    let mut r_plus_ha = pk.multiply(&h);
+    r_plus_ha.add_assign(&sig.r);
 
     r_plus_ha == sb
 }

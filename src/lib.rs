@@ -29,4 +29,3 @@ pub mod eddsa;
 pub mod gadgets;
 pub mod merkle;
 pub mod mimc;
-mod utils;
