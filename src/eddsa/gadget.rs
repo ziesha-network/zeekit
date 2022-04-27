@@ -1,10 +1,19 @@
-use super::BASE;
+use super::{PointAffine, BASE};
 use crate::{gadgets, mimc};
 use dusk_plonk::prelude::*;
 
 pub struct WitnessSignature {
     pub r: WitnessPoint,
     pub s: Witness,
+}
+
+impl Into<JubJubExtended> for PointAffine {
+    fn into(self) -> JubJubExtended {
+        JubJubExtended::from(JubJubAffine::from_raw_unchecked(
+            self.0.into(),
+            self.1.into(),
+        ))
+    }
 }
 
 // Mul by 8
