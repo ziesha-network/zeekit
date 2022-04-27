@@ -1,6 +1,6 @@
 mod curve;
 pub mod gadget;
-use curve::*;
+pub use curve::*;
 
 use crate::{mimc, Fr, FrRepr};
 use ff::PrimeField;
@@ -17,7 +17,7 @@ pub struct PrivateKey {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct PublicKey(PointCompressed);
+pub struct PublicKey(pub PointCompressed);
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Signature {
