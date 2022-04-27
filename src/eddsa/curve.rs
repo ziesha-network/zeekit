@@ -1,6 +1,7 @@
 use std::ops::*;
 use std::str::FromStr;
 
+use dusk_plonk::prelude::{JubJubAffine, JubJubExtended};
 use ff::{Field, PrimeField, PrimeFieldBits};
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
@@ -65,6 +66,15 @@ impl PointAffine {
     }
     pub fn compress(&self) -> PointCompressed {
         PointCompressed(self.0, self.1.is_odd().into())
+    }
+}
+
+impl Into<JubJubExtended> for PointAffine {
+    fn into(self) -> JubJubExtended {
+        JubJubExtended::from(JubJubAffine::from_raw_unchecked(
+            self.0.into(),
+            self.1.into(),
+        ))
     }
 }
 

@@ -2,7 +2,7 @@ mod curve;
 pub mod gadget;
 use curve::*;
 
-use crate::{mimc, Fr};
+use crate::{mimc, Fr, FrRepr};
 use ff::PrimeField;
 use num_bigint::BigUint;
 use num_integer::Integer;
@@ -25,7 +25,7 @@ pub struct Signature {
     pub s: Fr,
 }
 
-fn generate_keys(randomness: Fr, scalar: Fr) -> (PublicKey, PrivateKey) {
+pub fn generate_keys(randomness: Fr, scalar: Fr) -> (PublicKey, PrivateKey) {
     let point = BASE.multiply(&scalar);
     let pk = PublicKey(point.compress());
     (
@@ -37,7 +37,8 @@ fn generate_keys(randomness: Fr, scalar: Fr) -> (PublicKey, PrivateKey) {
         },
     )
 }
-fn sign(sk: &PrivateKey, message: Fr) -> Signature {
+
+pub fn sign(sk: &PrivateKey, message: Fr) -> Signature {
     // r=H(b,M)
     let r = mimc::mimc(vec![sk.randomness, message]);
 
@@ -53,14 +54,17 @@ fn sign(sk: &PrivateKey, message: Fr) -> Signature {
     ha.mul_assign(&BigUint::from_bytes_le(sk.scalar.to_repr().as_ref()));
     s.add_assign(&ha);
     s = s.mod_floor(&*ORDER);
+    let s_as_fr = {
+        let s_bytes = s.to_bytes_le();
+        let mut s_repr = FrRepr([0u8; 32]);
+        s_repr.0[0..s_bytes.len()].copy_from_slice(&s_bytes);
+        Fr::from_repr(s_repr).unwrap()
+    };
 
-    Signature {
-        r: rr,
-        s: h, //FIX!
-    }
+    Signature { r: rr, s: s_as_fr }
 }
 
-fn verify(pk: &PublicKey, message: Fr, sig: &Signature) -> bool {
+pub fn verify(pk: &PublicKey, message: Fr, sig: &Signature) -> bool {
     let pk = pk.0.decompress();
 
     // h=H(R,A,M)
@@ -72,4 +76,27 @@ fn verify(pk: &PublicKey, message: Fr, sig: &Signature) -> bool {
     r_plus_ha.add_assign(&sig.r);
 
     r_plus_ha == sb
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_public_key_compression() {
+        let p1 = BASE.multiply(&Fr::from(123));
+        let p2 = p1.compress().decompress();
+
+        assert_eq!(p1, p2);
+    }
+
+    #[test]
+    fn test_signature_verification() {
+        let (pk, sk) = generate_keys(Fr::from(123), Fr::from(234));
+        let msg = Fr::from(345);
+        let fake_msg = Fr::from(456);
+        let sig = sign(&sk, msg);
+        assert!(verify(&pk, msg, &sig));
+        assert!(!verify(&pk, fake_msg, &sig));
+    }
 }
