@@ -2,6 +2,11 @@
 name = "zeekit"
 version = "0.1.0"
 edition = "2021"
+authors = ["Keyvan Kambakhsh <keyvankambakhsh@gmail.com>"]
+description = "Cryptography primitives and SNARK gadgets for Zeeka Network"
+repository = "https://github.com/zeeka-network/zeekit"
+homepage = "https://github.com/zeeka-network/zeekit"
+license = "MIT"
 
 [dependencies]
 dusk-plonk = "0.10.0"
