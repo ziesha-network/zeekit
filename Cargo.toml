@@ -1,6 +1,6 @@
 [package]
 name = "zeekit"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["Keyvan Kambakhsh <keyvankambakhsh@gmail.com>"]
 description = "Cryptography primitives and SNARK gadgets for Zeeka Network"
@@ -9,9 +9,9 @@ homepage = "https://github.com/zeeka-network/zeekit"
 license = "MIT"
 
 [dependencies]
-dusk-plonk = "0.10.0"
-dusk-jubjub = "0.11.1"
-dusk-bytes = "0.1.5"
+dusk-plonk = { git="https://github.com/zeeka-network/dusk-plonk-gpu.git", tag = "v0.10.1" }
+dusk-jubjub = { git="https://github.com/zeeka-network/jubjub.git", tag = "v0.11.2" }
+dusk-bytes = { git="https://github.com/zeeka-network/dusk-bytes.git", tag = "v0.1.6" }
 rand_core = "0.6.3"
 lazy_static = "1.4.0"
 num-bigint = "0.4"
