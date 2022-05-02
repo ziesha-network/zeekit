@@ -42,10 +42,11 @@ fn mul(composer: &mut TurboComposer, scalar: Witness, point: WitnessPoint) -> Wi
 
 pub fn verify(
     composer: &mut TurboComposer,
+    enabled: Witness,
     pk: WitnessPoint,
     msg: Witness,
     sig: WitnessSignature,
-) -> Witness {
+) {
     // h=H(R,A,M)
     let mut inp = Vec::new();
     inp.push(*sig.r.x());
@@ -62,7 +63,6 @@ pub fn verify(
     r_plus_ha = composer.component_add_point(r_plus_ha, sig.r);
     r_plus_ha = mul_cofactor(composer, r_plus_ha);
 
-    let x_equals = gadgets::eq::<255>(composer, *r_plus_ha.x(), *sb.x());
-    let y_equals = gadgets::eq::<255>(composer, *r_plus_ha.y(), *sb.y());
-    composer.component_and(x_equals, y_equals, 2)
+    gadgets::controllable_assert_eq(composer, enabled, *r_plus_ha.x(), *sb.x());
+    gadgets::controllable_assert_eq(composer, enabled, *r_plus_ha.y(), *sb.y());
 }

@@ -24,11 +24,12 @@ pub fn calc_root(
 
 pub fn check_proof(
     composer: &mut TurboComposer,
+    enabled: Witness,
     index: Witness,
     val: Witness,
     proof: Vec<Witness>,
     root: Witness,
-) -> Witness {
+) {
     let new_root = calc_root(composer, index, val, proof);
-    gadgets::eq::<255>(composer, new_root, root)
+    gadgets::controllable_assert_eq(composer, enabled, new_root, root);
 }

@@ -73,3 +73,14 @@ pub fn lte<const N: usize>(composer: &mut TurboComposer, a: Witness, b: Witness)
     let not_lt_and_not_gt = bit_and(composer, not_lt, not_gt);
     bit_or(composer, lt, not_lt_and_not_gt)
 }
+
+pub fn controllable_assert_eq(
+    composer: &mut TurboComposer,
+    enabled: Witness,
+    a: Witness,
+    b: Witness,
+) {
+    let aa = composer.gate_mul(Constraint::new().mult(1).output(1).a(a).b(enabled));
+    let bb = composer.gate_mul(Constraint::new().mult(1).output(1).a(b).b(enabled));
+    composer.assert_equal(aa, bb);
+}
