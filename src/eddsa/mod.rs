@@ -16,10 +16,10 @@ pub struct PrivateKey {
     pub scalar: Fr,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct PublicKey(pub PointCompressed);
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct Signature {
     pub r: PointAffine,
     pub s: Fr,
