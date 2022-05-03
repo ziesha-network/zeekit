@@ -26,6 +26,7 @@ impl From<BlsScalar> for Fr {
 
 mod config;
 pub mod eddsa;
+pub mod experiment;
 pub mod gadgets;
 pub mod merkle;
 pub mod mimc;
