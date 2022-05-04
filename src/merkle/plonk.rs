@@ -1,5 +1,5 @@
-use crate::{config, mimc};
 use crate::common;
+use crate::{config, mimc};
 use dusk_plonk::prelude::*;
 
 fn merge_hash(composer: &mut TurboComposer, dir: Witness, a: Witness, b: Witness) -> Witness {

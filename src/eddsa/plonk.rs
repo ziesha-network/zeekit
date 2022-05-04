@@ -1,6 +1,6 @@
 use super::{PointAffine, BASE};
-use crate::mimc;
 use crate::common;
+use crate::mimc;
 use dusk_plonk::prelude::*;
 
 impl Into<JubJubAffine> for PointAffine {

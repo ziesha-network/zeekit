@@ -1,13 +1,13 @@
-use ff::PrimeField;
+use super::MIMC_PARAMS;
+use crate::BellmanFr;
+use crate::Fr;
+use ff::Field;
+use std::ops::*;
 
 use bellman::{ConstraintSystem, SynthesisError, Variable};
 
-pub const MIMC_ROUNDS: usize = 322;
-
-pub fn mimc<S: PrimeField>(mut xl: S, mut xr: S, constants: &[S]) -> S {
-    assert_eq!(constants.len(), MIMC_ROUNDS);
-
-    for c in constants {
+pub fn mimc(mut xl: Fr, mut xr: Fr) -> Fr {
+    for c in MIMC_PARAMS.iter() {
         let mut tmp1 = xl;
         tmp1.add_assign(c);
         let mut tmp2 = tmp1.square();
@@ -20,21 +20,20 @@ pub fn mimc<S: PrimeField>(mut xl: S, mut xr: S, constants: &[S]) -> S {
     xl
 }
 
-pub fn mimc_gadget<'a, Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
+pub fn mimc_gadget<'a, CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     mut xl: Variable,
     mut xr: Variable,
-    mut xl_value: Option<Scalar>,
-    mut xr_value: Option<Scalar>,
-    constants: &'a [Scalar],
+    mut xl_value: Option<BellmanFr>,
+    mut xr_value: Option<BellmanFr>,
 ) -> Result<Variable, SynthesisError> {
-    for i in 0..MIMC_ROUNDS {
+    for (i, c) in MIMC_PARAMS.iter().cloned().enumerate() {
         // xL, xR := xR + (xL + Ci)^3, xL
         let cs = &mut cs.namespace(|| format!("round {}", i));
 
         // tmp = (xL + Ci)^2
         let tmp_value = xl_value.map(|mut e| {
-            e.add_assign(&constants[i]);
+            e.add_assign(&c.into());
             e.square()
         });
         let tmp = cs.alloc(
@@ -44,8 +43,8 @@ pub fn mimc_gadget<'a, Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
 
         cs.enforce(
             || "tmp = (xL + Ci)^2",
-            |lc| lc + xl + (constants[i], CS::one()),
-            |lc| lc + xl + (constants[i], CS::one()),
+            |lc| lc + xl + (c.into(), CS::one()),
+            |lc| lc + xl + (c.into(), CS::one()),
             |lc| lc + tmp,
         );
 
@@ -53,7 +52,7 @@ pub fn mimc_gadget<'a, Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
         // new_xL = xR + tmp * (xL + Ci)
         // new_xL - xR = tmp * (xL + Ci)
         let new_xl_value = xl_value.map(|mut e| {
-            e.add_assign(&constants[i]);
+            e.add_assign(&c.into());
             e.mul_assign(&tmp_value.unwrap());
             e.add_assign(&xr_value.unwrap());
             e
@@ -67,7 +66,7 @@ pub fn mimc_gadget<'a, Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
         cs.enforce(
             || "new_xL = xR + (xL + Ci)^3",
             |lc| lc + tmp,
-            |lc| lc + xl + (constants[i], CS::one()),
+            |lc| lc + xl + (c.into(), CS::one()),
             |lc| lc + new_xl - xr,
         );
 
