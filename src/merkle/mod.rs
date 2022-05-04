@@ -1,6 +1,9 @@
 #[cfg(feature = "plonk")]
 pub mod plonk;
 
+#[cfg(feature = "groth16")]
+pub mod groth16;
+
 use super::config::LOG_TREE_SIZE;
 use crate::{mimc, Fr};
 use ff::Field;
