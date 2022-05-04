@@ -2,7 +2,7 @@ use bellman::{groth16, Circuit, ConstraintSystem, SynthesisError};
 use bls12_381::{Bls12, Scalar as Fr};
 use ff::PrimeField;
 use rand::rngs::OsRng;
-use zeekit::experiment::{mimc, mimc_gadget};
+use zeekit::mimc::groth16::{mimc, mimc_gadget};
 
 fn build_mimc_params<Scalar: PrimeField>() -> Vec<Scalar> {
     (0..322).map(|i| Scalar::from(i)).collect()

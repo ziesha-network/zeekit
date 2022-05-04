@@ -1,6 +1,8 @@
 mod curve;
-pub mod gadget;
 pub use curve::*;
+
+#[cfg(feature = "plonk")]
+pub mod plonk;
 
 use crate::{mimc, Fr, FrRepr};
 use ff::PrimeField;

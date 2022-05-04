@@ -1,4 +1,5 @@
-pub mod gadget;
+#[cfg(feature = "plonk")]
+pub mod plonk;
 
 use super::config::LOG_TREE_SIZE;
 use crate::{mimc, Fr};

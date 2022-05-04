@@ -1,6 +1,13 @@
 use super::{PointAffine, BASE};
-use crate::{gadgets, mimc};
+use crate::mimc;
+use crate::common;
 use dusk_plonk::prelude::*;
+
+impl Into<JubJubAffine> for PointAffine {
+    fn into(self) -> JubJubAffine {
+        JubJubAffine::from_raw_unchecked(self.0.into(), self.1.into())
+    }
+}
 
 pub struct WitnessSignature {
     pub r: WitnessPoint,
@@ -54,7 +61,7 @@ pub fn verify(
     inp.push(*pk.x());
     inp.push(*pk.y());
     inp.push(msg);
-    let h = mimc::gadget::mimc(composer, inp);
+    let h = mimc::plonk::mimc(composer, inp);
 
     let mut sb = composer.component_mul_generator(sig.s, *BASE);
     sb = mul_cofactor(composer, sb);
@@ -63,6 +70,6 @@ pub fn verify(
     r_plus_ha = composer.component_add_point(r_plus_ha, sig.r);
     r_plus_ha = mul_cofactor(composer, r_plus_ha);
 
-    gadgets::controllable_assert_eq(composer, enabled, *r_plus_ha.x(), *sb.x());
-    gadgets::controllable_assert_eq(composer, enabled, *r_plus_ha.y(), *sb.y());
+    common::plonk::controllable_assert_eq(composer, enabled, *r_plus_ha.x(), *sb.x());
+    common::plonk::controllable_assert_eq(composer, enabled, *r_plus_ha.y(), *sb.y());
 }

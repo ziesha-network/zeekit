@@ -2,7 +2,11 @@ use crate::config::MIMC_PARAMS;
 use crate::Fr;
 use ff::Field;
 
-pub mod gadget;
+#[cfg(feature = "plonk")]
+pub mod plonk;
+
+#[cfg(feature = "groth16")]
+pub mod groth16;
 
 pub fn mimc_encrypt(mut inp: Fr, k: Fr) -> Fr {
     for c in MIMC_PARAMS.iter() {

@@ -1,9 +1,10 @@
-use crate::{config, gadgets, mimc};
+use crate::{config, mimc};
+use crate::common;
 use dusk_plonk::prelude::*;
 
 fn merge_hash(composer: &mut TurboComposer, dir: Witness, a: Witness, b: Witness) -> Witness {
-    let l = mimc::gadget::mimc(composer, vec![a, b]);
-    let r = mimc::gadget::mimc(composer, vec![b, a]);
+    let l = mimc::plonk::mimc(composer, vec![a, b]);
+    let r = mimc::plonk::mimc(composer, vec![b, a]);
     composer.component_boolean(dir);
     composer.component_select(dir, r, l)
 }
@@ -31,5 +32,5 @@ pub fn check_proof(
     root: Witness,
 ) {
     let new_root = calc_root(composer, index, val, proof);
-    gadgets::controllable_assert_eq(composer, enabled, new_root, root);
+    common::plonk::controllable_assert_eq(composer, enabled, new_root, root);
 }

@@ -9,16 +9,23 @@ homepage = "https://github.com/zeeka-network/zeekit"
 license = "MIT"
 
 [dependencies]
-dusk-plonk = "0.10.0"
-dusk-jubjub = "0.11.1"
-dusk-bytes = "0.1.5"
-rand_core = "0.6.3"
+rand = "0.8.5"
 lazy_static = "1.4.0"
 num-bigint = "0.4"
 num-integer = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_derive = "1.0"
 ff = { version = "0.11", features = ["derive"] }
-bellman = "0.11.1"
-bls12_381 = "0.6.0"
-rand = "0.8.5"
+
+dusk-plonk = { version = "0.10.0", optional = true }
+dusk-jubjub = { version = "0.11.1", optional = true }
+dusk-bytes = { version = "0.1.5", optional = true }
+
+bellman = { version = "0.11.1", optional = true }
+bls12_381 = { version = "0.6.0", optional = true }
+
+
+[features]
+default = ["groth16"]
+plonk = ["dusk-plonk", "dusk-jubjub", "dusk-bytes"]
+groth16 = ["bellman", "bls12_381"]

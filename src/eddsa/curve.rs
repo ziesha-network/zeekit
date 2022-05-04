@@ -1,7 +1,6 @@
 use std::ops::*;
 use std::str::FromStr;
 
-use dusk_plonk::prelude::JubJubAffine;
 use ff::{Field, PrimeField, PrimeFieldBits};
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
@@ -13,12 +12,6 @@ pub struct PointCompressed(pub Fr, pub bool);
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub struct PointAffine(pub Fr, pub Fr);
-
-impl Into<JubJubAffine> for PointAffine {
-    fn into(self) -> JubJubAffine {
-        JubJubAffine::from_raw_unchecked(self.0.into(), self.1.into())
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PointProjective(pub Fr, pub Fr, pub Fr);
