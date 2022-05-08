@@ -3,8 +3,8 @@ use crate::{config, mimc};
 use dusk_plonk::prelude::*;
 
 fn merge_hash(composer: &mut TurboComposer, dir: Witness, a: Witness, b: Witness) -> Witness {
-    let l = mimc::plonk::mimc(composer, vec![a, b]);
-    let r = mimc::plonk::mimc(composer, vec![b, a]);
+    let l = mimc::plonk::mimc(composer, a, b);
+    let r = mimc::plonk::mimc(composer, b, a);
     composer.component_boolean(dir);
     composer.component_select(dir, r, l)
 }

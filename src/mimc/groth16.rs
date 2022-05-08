@@ -1,24 +1,8 @@
 use super::MIMC_PARAMS;
 use crate::BellmanFr;
-use crate::Fr;
-use ff::Field;
 use std::ops::*;
 
 use bellman::{ConstraintSystem, SynthesisError, Variable};
-
-pub fn mimc(mut xl: Fr, mut xr: Fr) -> Fr {
-    for c in MIMC_PARAMS.iter() {
-        let mut tmp1 = xl;
-        tmp1.add_assign(c);
-        let mut tmp2 = tmp1.square();
-        tmp2.mul_assign(&tmp1);
-        tmp2.add_assign(&xr);
-        xr = xl;
-        xl = tmp2;
-    }
-
-    xl
-}
 
 pub fn mimc_gadget<'a, CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,

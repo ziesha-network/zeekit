@@ -48,9 +48,9 @@ impl SparseTree {
     pub fn verify(mut index: u64, mut value: Fr, proof: Proof, root: Fr) -> bool {
         for p in proof.0 {
             value = if index & 1 == 0 {
-                mimc::mimc(vec![value, p])
+                mimc::mimc(value, p)
             } else {
-                mimc::mimc(vec![p, value])
+                mimc::mimc(p, value)
             };
             index = index >> 1;
         }
@@ -61,11 +61,11 @@ impl SparseTree {
             self.levels[level].insert(index, value);
             let neigh = if index & 1 == 0 { index + 1 } else { index - 1 };
             let neigh_val = self.get(level, neigh);
-            value = mimc::mimc(if index & 1 == 0 {
-                vec![value, neigh_val]
+            value = if index & 1 == 0 {
+                mimc::mimc(value, neigh_val)
             } else {
-                vec![neigh_val, value]
-            });
+                mimc::mimc(neigh_val, value)
+            };
             index = index >> 1;
         }
     }

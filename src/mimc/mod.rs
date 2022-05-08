@@ -1,6 +1,7 @@
 use crate::config::MIMC_PARAMS;
 use crate::Fr;
 use ff::Field;
+use std::ops::*;
 
 #[cfg(feature = "plonk")]
 pub mod plonk;
@@ -8,19 +9,16 @@ pub mod plonk;
 #[cfg(feature = "groth16")]
 pub mod groth16;
 
-pub fn mimc_encrypt(mut inp: Fr, k: Fr) -> Fr {
+pub fn mimc(mut xl: Fr, mut xr: Fr) -> Fr {
     for c in MIMC_PARAMS.iter() {
-        inp = inp + k + c;
-        inp = inp * inp * inp;
+        let mut tmp1 = xl;
+        tmp1.add_assign(c);
+        let mut tmp2 = tmp1.square();
+        tmp2.mul_assign(&tmp1);
+        tmp2.add_assign(&xr);
+        xr = xl;
+        xl = tmp2;
     }
-    inp
-}
 
-pub fn mimc(inp: Vec<Fr>) -> Fr {
-    let mut digest = Fr::zero();
-    for d in inp {
-        let encrypted = mimc_encrypt(d, digest);
-        digest = digest + encrypted;
-    }
-    digest
+    xl
 }
