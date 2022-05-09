@@ -10,8 +10,8 @@ use std::ops::*;
 
 #[derive(Clone)]
 pub struct AllocatedPoint {
-    x: AllocatedNum<BellmanFr>,
-    y: AllocatedNum<BellmanFr>,
+    pub x: AllocatedNum<BellmanFr>,
+    pub y: AllocatedNum<BellmanFr>,
 }
 
 pub fn add_point<'a, CS: ConstraintSystem<BellmanFr>>(
@@ -62,7 +62,7 @@ pub fn add_point<'a, CS: ConstraintSystem<BellmanFr>>(
         || "y_1 - y_2 == sum_y * (1 - common)",
         |lc| lc + CS::one() - common.get_variable(),
         |lc| lc + sum_y.get_variable(),
-        |lc| lc + y_1.get_variable() + y_2.get_variable(),
+        |lc| lc + y_1.get_variable() - y_2.get_variable(),
     );
 
     Ok(AllocatedPoint { x: sum_x, y: sum_y })
