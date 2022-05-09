@@ -138,8 +138,8 @@ impl PointProjective {
 }
 
 lazy_static! {
-    static ref A: Fr = Fr::one().neg();
-    static ref D: Fr = Fr::from_str_vartime(
+    pub static ref A: Fr = Fr::one().neg();
+    pub static ref D: Fr = Fr::from_str_vartime(
         "19257038036680949359750312669786877991949435402254120286184196891950884077233"
     )
     .unwrap();
