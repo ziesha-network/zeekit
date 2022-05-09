@@ -1,3 +1,4 @@
+use bellman::gadgets::boolean::AllocatedBit;
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{groth16, Circuit, ConstraintSystem, SynthesisError};
 use bls12_381::{Bls12, Scalar as BellmanFr};
@@ -8,9 +9,11 @@ use zeekit::{eddsa, Fr};
 pub struct DummyDemo {
     curve_a: Option<BellmanFr>,
     curve_d: Option<BellmanFr>,
-    a: (Option<BellmanFr>, Option<BellmanFr>),
-    mul: Option<BellmanFr>,
-    c: (Option<BellmanFr>, Option<BellmanFr>),
+    base: (Option<BellmanFr>, Option<BellmanFr>),
+    msg: Option<BellmanFr>,
+    pk: (Option<BellmanFr>, Option<BellmanFr>),
+    sig_r: (Option<BellmanFr>, Option<BellmanFr>),
+    sig_s: Option<BellmanFr>,
 }
 
 impl Circuit<BellmanFr> for DummyDemo {
@@ -27,52 +30,63 @@ impl Circuit<BellmanFr> for DummyDemo {
         })?;
         curve_d.inputize(&mut *cs)?;
 
-        let a_x = AllocatedNum::alloc(&mut *cs, || {
-            self.a.0.ok_or(SynthesisError::AssignmentMissing)
+        let base_x = AllocatedNum::alloc(&mut *cs, || {
+            self.base.0.ok_or(SynthesisError::AssignmentMissing)
         })?;
-        a_x.inputize(&mut *cs)?;
+        base_x.inputize(&mut *cs)?;
 
-        let a_y = AllocatedNum::alloc(&mut *cs, || {
-            self.a.1.ok_or(SynthesisError::AssignmentMissing)
+        let base_y = AllocatedNum::alloc(&mut *cs, || {
+            self.base.1.ok_or(SynthesisError::AssignmentMissing)
         })?;
-        a_y.inputize(&mut *cs)?;
+        base_y.inputize(&mut *cs)?;
 
-        let mul = AllocatedNum::alloc(&mut *cs, || {
-            self.mul.ok_or(SynthesisError::AssignmentMissing)
+        let msg = AllocatedNum::alloc(&mut *cs, || {
+            self.msg.ok_or(SynthesisError::AssignmentMissing)
         })?;
-        mul.inputize(&mut *cs)?;
+        msg.inputize(&mut *cs)?;
 
-        let c_x = AllocatedNum::alloc(&mut *cs, || {
-            self.c.0.ok_or(SynthesisError::AssignmentMissing)
+        let pk_x = AllocatedNum::alloc(&mut *cs, || {
+            self.pk.0.ok_or(SynthesisError::AssignmentMissing)
         })?;
-        c_x.inputize(&mut *cs)?;
+        pk_x.inputize(&mut *cs)?;
 
-        let c_y = AllocatedNum::alloc(&mut *cs, || {
-            self.c.1.ok_or(SynthesisError::AssignmentMissing)
+        let pk_y = AllocatedNum::alloc(&mut *cs, || {
+            self.pk.1.ok_or(SynthesisError::AssignmentMissing)
         })?;
-        c_y.inputize(&mut *cs)?;
+        pk_y.inputize(&mut *cs)?;
 
-        let calc = eddsa::groth16::mul_point(
-            &mut *cs,
-            curve_a,
-            curve_d,
-            eddsa::groth16::AllocatedPoint { x: a_x, y: a_y },
-            mul,
+        let sig_s = AllocatedNum::alloc(&mut *cs, || {
+            self.sig_s.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+        sig_s.inputize(&mut *cs)?;
+
+        let sig_r_x = AllocatedNum::alloc(&mut *cs, || {
+            self.sig_r.0.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+        sig_r_x.inputize(&mut *cs)?;
+
+        let sig_r_y = AllocatedNum::alloc(&mut *cs, || {
+            self.sig_r.1.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+        sig_r_y.inputize(&mut *cs)?;
+
+        let base = eddsa::groth16::AllocatedPoint {
+            x: base_x,
+            y: base_y,
+        };
+
+        let pk = eddsa::groth16::AllocatedPoint { x: pk_x, y: pk_y };
+
+        let sig_r = eddsa::groth16::AllocatedPoint {
+            x: sig_r_x,
+            y: sig_r_y,
+        };
+
+        let enabled = AllocatedBit::alloc(&mut *cs, Some(true))?;
+
+        eddsa::groth16::verify_eddsa(
+            &mut *cs, enabled, curve_a, curve_d, base, pk, msg, sig_r, sig_s,
         )?;
-
-        cs.enforce(
-            || "",
-            |lc| lc + calc.x.get_variable(),
-            |lc| lc + CS::one(),
-            |lc| lc + c_x.get_variable(),
-        );
-
-        cs.enforce(
-            || "",
-            |lc| lc + calc.y.get_variable(),
-            |lc| lc + CS::one(),
-            |lc| lc + c_y.get_variable(),
-        );
 
         Ok(())
     }
@@ -83,27 +97,37 @@ fn main() {
         let c = DummyDemo {
             curve_a: None,
             curve_d: None,
-            a: (None, None),
-            mul: None,
-            c: (None, None),
+            base: (None, None),
+            msg: None,
+            pk: (None, None),
+            sig_r: (None, None),
+            sig_s: None,
         };
         groth16::generate_random_parameters::<Bls12, _, _>(c, &mut OsRng).unwrap()
     };
 
     let pvk = groth16::prepare_verifying_key(&params.vk);
 
+    let (publ, priva) = eddsa::generate_keys(Fr::from(123456), Fr::from(2345567));
+    let pk = publ.0.decompress();
+    let msg = Fr::from(12345678);
+    let sig = eddsa::sign(&priva, msg);
+
     let curve_a = eddsa::A.clone();
     let curve_d = eddsa::D.clone();
-    let a = eddsa::BASE.clone();
-    let mul = Fr::from(1234567);
-    let c = a.multiply(&mul);
+    let base = eddsa::BASE.clone();
+
+    let sig_s = sig.s;
+    let sig_r = sig.r;
 
     let circ = DummyDemo {
         curve_a: Some(curve_a.into()),
         curve_d: Some(curve_d.into()),
-        a: (Some(a.0.into()), Some(a.1.into())),
-        mul: Some(mul.into()),
-        c: (Some(c.0.into()), Some(c.1.into())),
+        base: (Some(base.0.into()), Some(base.1.into())),
+        msg: Some(msg.into()),
+        pk: (Some(pk.0.into()), Some(pk.1.into())),
+        sig_s: Some(sig_s.into()),
+        sig_r: (Some(sig_r.0.into()), Some(sig_r.1.into())),
     };
 
     let proof = groth16::create_random_proof(circ, &params, &mut OsRng).unwrap();
@@ -111,11 +135,14 @@ fn main() {
     let inputs = vec![
         curve_a.into(),
         curve_d.into(),
-        a.0.into(),
-        a.1.into(),
-        Fr::from(1234567).into(),
-        c.0.into(),
-        c.1.into(),
+        base.0.into(),
+        base.1.into(),
+        msg.into(),
+        pk.0.into(),
+        pk.1.into(),
+        sig_s.into(),
+        sig_r.0.into(),
+        sig_r.1.into(),
     ];
 
     println!(
