@@ -8,18 +8,10 @@ use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, SynthesisError};
 use std::ops::*;
 
+#[derive(Clone)]
 pub struct AllocatedPoint {
-    variables: (AllocatedNum<BellmanFr>, AllocatedNum<BellmanFr>),
-    value: Option<PointAffine>,
-}
-
-impl AllocatedPoint {
-    pub fn get_value(&self) -> Option<PointAffine> {
-        self.value
-    }
-    pub fn get_variables(&self) -> (AllocatedNum<BellmanFr>, AllocatedNum<BellmanFr>) {
-        self.variables.clone()
-    }
+    x: AllocatedNum<BellmanFr>,
+    y: AllocatedNum<BellmanFr>,
 }
 
 pub fn add_point<'a, CS: ConstraintSystem<BellmanFr>>(
@@ -29,10 +21,15 @@ pub fn add_point<'a, CS: ConstraintSystem<BellmanFr>>(
     a: AllocatedPoint,
     b: AllocatedPoint,
 ) -> Result<AllocatedPoint, SynthesisError> {
-    let sum_value = a.get_value().zip(b.get_value()).map(|(mut a, b)| {
-        a.add_assign(&b);
-        a
-    });
+    let sum_value =
+        a.x.get_value()
+            .zip(a.y.get_value())
+            .zip(b.x.get_value().zip(b.y.get_value()))
+            .map(|((a_x, a_y), (b_x, b_y))| {
+                let mut sum = PointAffine(a_x.into(), a_y.into());
+                sum.add_assign(&PointAffine(b_x.into(), b_y.into()));
+                sum
+            });
     let sum_x = AllocatedNum::alloc(&mut *cs, || {
         sum_value
             .map(|v| v.0.into())
@@ -45,13 +42,13 @@ pub fn add_point<'a, CS: ConstraintSystem<BellmanFr>>(
     })?;
 
     let common = curve_d
-        .mul(&mut *cs, &a.get_variables().0)?
-        .mul(&mut *cs, &b.get_variables().0)?
-        .mul(&mut *cs, &a.get_variables().1)?
-        .mul(&mut *cs, &b.get_variables().1)?;
+        .mul(&mut *cs, &a.x)?
+        .mul(&mut *cs, &b.x)?
+        .mul(&mut *cs, &a.y)?
+        .mul(&mut *cs, &b.y)?;
 
-    let x_1 = a.get_variables().0.mul(&mut *cs, &b.get_variables().1)?;
-    let x_2 = a.get_variables().1.mul(&mut *cs, &b.get_variables().0)?;
+    let x_1 = a.x.mul(&mut *cs, &b.y)?;
+    let x_2 = a.y.mul(&mut *cs, &b.x)?;
     cs.enforce(
         || "x_1 + x_2 == sum_x * (1 + common)",
         |lc| lc + CS::one() + common.get_variable(),
@@ -59,10 +56,8 @@ pub fn add_point<'a, CS: ConstraintSystem<BellmanFr>>(
         |lc| lc + x_1.get_variable() + x_2.get_variable(),
     );
 
-    let y_1 = a.get_variables().1.mul(&mut *cs, &b.get_variables().1)?;
-    let y_2 = curve_a
-        .mul(&mut *cs, &a.get_variables().0)?
-        .mul(&mut *cs, &b.get_variables().0)?;
+    let y_1 = a.y.mul(&mut *cs, &b.y)?;
+    let y_2 = curve_a.mul(&mut *cs, &a.x)?.mul(&mut *cs, &b.x)?;
     cs.enforce(
         || "y_1 - y_2 == sum_y * (1 - common)",
         |lc| lc + CS::one() - common.get_variable(),
@@ -70,20 +65,46 @@ pub fn add_point<'a, CS: ConstraintSystem<BellmanFr>>(
         |lc| lc + y_1.get_variable() + y_2.get_variable(),
     );
 
-    Ok(AllocatedPoint {
-        variables: (sum_x, sum_y),
-        value: sum_value,
-    })
+    Ok(AllocatedPoint { x: sum_x, y: sum_y })
 }
 
 pub fn mul_point<'a, CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
+    curve_a: AllocatedNum<BellmanFr>,
+    curve_d: AllocatedNum<BellmanFr>,
     base: AllocatedPoint,
     b: AllocatedNum<BellmanFr>,
 ) -> Result<AllocatedPoint, SynthesisError> {
     let bits = b.to_bits_le(&mut *cs)?;
-    for bit in bits.iter().rev() {}
-    unimplemented!();
+    let mut result = AllocatedPoint {
+        x: AllocatedNum::alloc(&mut *cs, || Ok(BellmanFr::zero()))?,
+        y: AllocatedNum::alloc(&mut *cs, || Ok(BellmanFr::one()))?,
+    };
+    for bit in bits.iter().rev() {
+        result = add_point(
+            &mut *cs,
+            curve_a.clone(),
+            curve_d.clone(),
+            result.clone(),
+            result,
+        )?;
+        let result_plus_base = add_point(
+            &mut *cs,
+            curve_a.clone(),
+            curve_d.clone(),
+            result.clone(),
+            base.clone(),
+        )?;
+        let (result_x, _) =
+            AllocatedNum::conditionally_reverse(&mut *cs, &result.x, &result_plus_base.x, &bit)?;
+        let (result_y, _) =
+            AllocatedNum::conditionally_reverse(&mut *cs, &result.y, &result_plus_base.y, &bit)?;
+        result = AllocatedPoint {
+            x: result_x,
+            y: result_y,
+        };
+    }
+    Ok(result)
 }
 
 // Mul by 8
