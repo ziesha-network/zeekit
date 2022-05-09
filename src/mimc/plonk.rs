@@ -4,7 +4,7 @@ use dusk_plonk::prelude::*;
 // Constraints:
 // q_mult · a · b  + q_left · a + q_right · b + q_output · o + q_fourth · d + q_constant + public_input = 0
 
-pub fn mimc(composer: &mut TurboComposer, mut xl: Witness, mut xr: Witness) -> Witness {
+pub fn double_mimc(composer: &mut TurboComposer, mut xl: Witness, mut xr: Witness) -> Witness {
     for c in MIMC_PARAMS.iter() {
         let tmp1 = composer.gate_add(
             Constraint::new()
@@ -20,4 +20,13 @@ pub fn mimc(composer: &mut TurboComposer, mut xl: Witness, mut xr: Witness) -> W
         xl = tmp2;
     }
     xl
+}
+
+pub fn mimc(composer: &mut TurboComposer, data: &[Witness]) -> Witness {
+    assert!(data.len() >= 2);
+    let mut accum = double_mimc(composer, data[0], data[1]);
+    for w in data[2..].iter() {
+        accum = double_mimc(composer, accum, *w);
+    }
+    accum
 }

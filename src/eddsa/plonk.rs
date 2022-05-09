@@ -55,10 +55,7 @@ pub fn verify(
     sig: WitnessSignature,
 ) {
     // h=H(R,A,M)
-    let h_rr = mimc::plonk::mimc(composer, *sig.r.x(), *sig.r.y());
-    let h_pk = mimc::plonk::mimc(composer, *pk.x(), *pk.y());
-    let h_rr_pk = mimc::plonk::mimc(composer, h_rr, h_pk);
-    let h = mimc::plonk::mimc(composer, h_rr_pk, msg);
+    let h = mimc::plonk::mimc(composer, &[*sig.r.x(), *sig.r.y(), *pk.x(), *pk.y(), msg]);
 
     let mut sb = composer.component_mul_generator(sig.s, *BASE);
     sb = mul_cofactor(composer, sb);

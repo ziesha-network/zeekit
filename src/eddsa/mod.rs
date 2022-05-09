@@ -45,16 +45,13 @@ pub fn generate_keys(randomness: Fr, scalar: Fr) -> (PublicKey, PrivateKey) {
 
 pub fn sign(sk: &PrivateKey, message: Fr) -> Signature {
     // r=H(b,M)
-    let r = mimc::mimc(sk.randomness, message);
+    let r = mimc::double_mimc(sk.randomness, message);
 
     // R=rB
     let rr = BASE.multiply(&r);
 
     // h=H(R,A,M)
-    let h_rr = mimc::mimc(rr.0, rr.1);
-    let h_pk = mimc::mimc(sk.public_key.0, sk.public_key.1);
-    let h_rr_pk = mimc::mimc(h_rr, h_pk);
-    let h = mimc::mimc(h_rr_pk, message);
+    let h = mimc::mimc(&[rr.0, rr.1, sk.public_key.0, sk.public_key.1, message]);
 
     // s = (r + ha) mod ORDER
     let mut s = BigUint::from_bytes_le(r.to_repr().as_ref());
@@ -76,10 +73,7 @@ pub fn verify(pk: &PublicKey, message: Fr, sig: &Signature) -> bool {
     let pk = pk.0.decompress();
 
     // h=H(R,A,M)
-    let h_rr = mimc::mimc(sig.r.0, sig.r.1);
-    let h_pk = mimc::mimc(pk.0, pk.1);
-    let h_rr_pk = mimc::mimc(h_rr, h_pk);
-    let h = mimc::mimc(h_rr_pk, message);
+    let h = mimc::mimc(&[sig.r.0, sig.r.1, pk.0, pk.1, message]);
 
     let sb = BASE.multiply(&sig.s);
 
