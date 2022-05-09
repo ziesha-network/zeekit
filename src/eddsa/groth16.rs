@@ -1,9 +1,9 @@
-use crate::mimc;
 use crate::BellmanFr;
+use crate::{common, mimc};
 
-use super::curve::{PointAffine, A, BASE, D, ORDER};
+use super::curve::PointAffine;
 
-use bellman::gadgets::boolean::{AllocatedBit, Boolean};
+use bellman::gadgets::boolean::AllocatedBit;
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, SynthesisError};
 use std::ops::*;
@@ -108,46 +108,79 @@ pub fn mul_point<'a, CS: ConstraintSystem<BellmanFr>>(
 }
 
 // Mul by 8
-/*fn mul_cofactor(composer: &mut TurboComposer, mut point: Point) -> WitnessPoint {
-    point = composer.component_add_point(point, point);
-    point = composer.component_add_point(point, point);
-    point = composer.component_add_point(point, point);
-    point
+pub fn mul_cofactor<'a, CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    curve_a: AllocatedNum<BellmanFr>,
+    curve_d: AllocatedNum<BellmanFr>,
+    mut point: AllocatedPoint,
+) -> Result<AllocatedPoint, SynthesisError> {
+    point = add_point(
+        &mut *cs,
+        curve_a.clone(),
+        curve_d.clone(),
+        point.clone(),
+        point,
+    )?;
+    point = add_point(
+        &mut *cs,
+        curve_a.clone(),
+        curve_d.clone(),
+        point.clone(),
+        point,
+    )?;
+    point = add_point(
+        &mut *cs,
+        curve_a.clone(),
+        curve_d.clone(),
+        point.clone(),
+        point,
+    )?;
+    Ok(point)
 }
 
-fn mul(composer: &mut TurboComposer, scalar: Witness, point: WitnessPoint) -> WitnessPoint {
-    let scalar_bits = composer.component_decomposition::<255>(scalar);
-
-    let identity = composer.append_constant_identity();
-    let mut result = identity;
-
-    for bit in scalar_bits.iter().rev() {
-        result = composer.component_add_point(result, result);
-
-        let point_to_add = composer.component_select_identity(*bit, point);
-        result = composer.component_add_point(result, point_to_add);
-    }
-
-    result
-}
-
-pub fn verify(
-    composer: &mut TurboComposer,
-    enabled: Witness,
-    pk: WitnessPoint,
-    msg: Witness,
-    sig: WitnessSignature,
-) {
+pub fn verify_eddsa<'a, CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    enabled: AllocatedBit,
+    curve_a: AllocatedNum<BellmanFr>,
+    curve_d: AllocatedNum<BellmanFr>,
+    base: AllocatedPoint,
+    pk: AllocatedPoint,
+    msg: AllocatedNum<BellmanFr>,
+    sig_r: AllocatedPoint,
+    sig_s: AllocatedNum<BellmanFr>,
+) -> Result<(), SynthesisError> {
     // h=H(R,A,M)
-    let h = mimc::plonk::mimc(composer, &[*sig.r.x(), *sig.r.y(), *pk.x(), *pk.y(), msg]);
+    let h = mimc::groth16::mimc(
+        &mut *cs,
+        &[
+            sig_r.x.clone(),
+            sig_r.y.clone(),
+            pk.x.clone(),
+            pk.y.clone(),
+            msg,
+        ],
+    )?;
 
-    let mut sb = composer.component_mul_generator(sig.s, *BASE);
-    sb = mul_cofactor(composer, sb);
+    let mut sb = mul_point(
+        &mut *cs,
+        curve_a.clone(),
+        curve_d.clone(),
+        base.clone(),
+        sig_s,
+    )?;
+    sb = mul_cofactor(&mut *cs, curve_a.clone(), curve_d.clone(), sb)?;
 
-    let mut r_plus_ha = mul(composer, h, pk);
-    r_plus_ha = composer.component_add_point(r_plus_ha, sig.r);
-    r_plus_ha = mul_cofactor(composer, r_plus_ha);
+    let mut r_plus_ha = mul_point(&mut *cs, curve_a.clone(), curve_d.clone(), pk.clone(), h)?;
+    r_plus_ha = add_point(
+        &mut *cs,
+        curve_a.clone(),
+        curve_d.clone(),
+        r_plus_ha.clone(),
+        sig_r,
+    )?;
+    r_plus_ha = mul_cofactor(&mut *cs, curve_a.clone(), curve_d.clone(), r_plus_ha)?;
 
-    common::plonk::controllable_assert_eq(composer, enabled, *r_plus_ha.x(), *sb.x());
-    common::plonk::controllable_assert_eq(composer, enabled, *r_plus_ha.y(), *sb.y());
-}*/
+    common::groth16::assert_equal(cs, enabled.clone(), r_plus_ha.x, sb.x)?;
+    common::groth16::assert_equal(cs, enabled, r_plus_ha.y, sb.y)?;
+    Ok(())
+}
