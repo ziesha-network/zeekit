@@ -161,14 +161,14 @@ pub fn verify_eddsa<'a, CS: ConstraintSystem<BellmanFr>>(
         ],
     )?;
 
-    let mut sb = mul_point(
+    let sb = mul_point(
         &mut *cs,
         curve_a.clone(),
         curve_d.clone(),
         base.clone(),
         sig_s,
     )?;
-    sb = mul_cofactor(&mut *cs, curve_a.clone(), curve_d.clone(), sb)?;
+    //sb = mul_cofactor(&mut *cs, curve_a.clone(), curve_d.clone(), sb)?;
 
     let mut r_plus_ha = mul_point(&mut *cs, curve_a.clone(), curve_d.clone(), pk.clone(), h)?;
     r_plus_ha = add_point(
@@ -178,7 +178,7 @@ pub fn verify_eddsa<'a, CS: ConstraintSystem<BellmanFr>>(
         r_plus_ha.clone(),
         sig_r,
     )?;
-    r_plus_ha = mul_cofactor(&mut *cs, curve_a.clone(), curve_d.clone(), r_plus_ha)?;
+    //r_plus_ha = mul_cofactor(&mut *cs, curve_a.clone(), curve_d.clone(), r_plus_ha)?;
 
     common::groth16::assert_equal(cs, enabled.clone(), r_plus_ha.x, sb.x)?;
     common::groth16::assert_equal(cs, enabled, r_plus_ha.y, sb.y)?;

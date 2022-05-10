@@ -1,6 +1,6 @@
 [package]
 name = "zeekit"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 authors = ["Keyvan Kambakhsh <keyvankambakhsh@gmail.com>"]
 description = "Cryptography primitives and SNARK gadgets for Zeeka Network"
@@ -21,8 +21,8 @@ dusk-plonk = { version = "0.10.0", optional = true }
 dusk-jubjub = { version = "0.11.1", optional = true }
 dusk-bytes = { version = "0.1.5", optional = true }
 
-bellman = { version = "0.11.1", optional = true }
-bls12_381 = { version = "0.6.0", optional = true }
+bellman = { version = "0.13.0", optional = true }
+bls12_381 = { version = "0.7.0", optional = true }
 
 
 [features]
