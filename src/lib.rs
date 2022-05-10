@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use dusk_plonk::prelude::BlsScalar;
 
 #[cfg(feature = "groth16")]
-use bls12_381::Scalar as BellmanFr;
+pub use bls12_381::Scalar as BellmanFr;
 
 #[macro_use]
 extern crate lazy_static;
