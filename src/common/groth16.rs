@@ -1,8 +1,50 @@
 use crate::BellmanFr;
 
-use bellman::gadgets::boolean::AllocatedBit;
+use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, SynthesisError};
+
+pub fn bit_or<'a, CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    a: &Boolean,
+    b: &Boolean,
+) -> Result<Boolean, SynthesisError> {
+    Ok(Boolean::and(&mut *cs, &a.not(), &b.not())?.not())
+}
+
+pub fn bit_lt<'a, CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    a: &Boolean,
+    b: &Boolean,
+) -> Result<Boolean, SynthesisError> {
+    Boolean::and(&mut *cs, &a.not(), &b)
+}
+
+pub fn lte<'a, CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    a: AllocatedNum<BellmanFr>,
+    b: AllocatedNum<BellmanFr>,
+) -> Result<(), SynthesisError> {
+    let a_bits = a.to_bits_le(&mut *cs)?;
+    let b_bits = b.to_bits_le(&mut *cs)?;
+
+    let mut lt = Boolean::Constant(false);
+    let mut gt = Boolean::Constant(false);
+    for (a, b) in a_bits.into_iter().zip(b_bits.into_iter()).rev() {
+        let a_lt_b = bit_lt(&mut *cs, &a, &b)?;
+        let not_gt_and_a_lt_b = Boolean::and(&mut *cs, &gt.not(), &a_lt_b)?;
+        lt = bit_or(&mut *cs, &lt, &not_gt_and_a_lt_b)?;
+
+        let b_lt_a = bit_lt(&mut *cs, &b, &a)?;
+        let not_lt_and_b_lt_a = Boolean::and(&mut *cs, &lt.not(), &b_lt_a)?;
+        gt = bit_or(&mut *cs, &gt, &not_lt_and_b_lt_a)?;
+    }
+
+    let not_lt_and_not_gt = Boolean::and(&mut *cs, &lt.not(), &gt.not())?;
+    let lt_or_not_lt_and_not_gt = bit_or(&mut *cs, &lt, &not_lt_and_not_gt)?;
+    Boolean::enforce_equal(&mut *cs, &lt_or_not_lt_and_not_gt, &Boolean::Constant(true))?;
+    Ok(())
+}
 
 pub fn assert_equal<'a, CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,

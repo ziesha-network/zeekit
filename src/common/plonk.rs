@@ -62,7 +62,7 @@ pub fn lte<const N: usize>(composer: &mut TurboComposer, a: Witness, b: Witness)
         let not_gt_and_a_lt_b = bit_and(composer, not_gt, a_lt_b);
         lt = bit_or(composer, lt, not_gt_and_a_lt_b);
 
-        let not_lt = bit_not(composer, gt);
+        let not_lt = bit_not(composer, lt);
         let b_lt_a = bit_lt(composer, b, a);
         let not_lt_and_b_lt_a = bit_and(composer, not_lt, b_lt_a);
         gt = bit_or(composer, gt, not_lt_and_b_lt_a);
