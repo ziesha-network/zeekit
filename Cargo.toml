@@ -1,6 +1,6 @@
 [package]
 name = "zeekit"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 authors = ["Keyvan Kambakhsh <keyvankambakhsh@gmail.com>"]
 description = "Cryptography primitives and SNARK gadgets for Zeeka Network"

@@ -17,6 +17,12 @@ extern crate lazy_static;
 #[PrimeFieldReprEndianness = "little"]
 pub struct Fr([u64; 4]);
 
+impl Fr {
+    pub fn new(num_le: [u8; 32]) -> Self {
+        Fr::from_repr_vartime(FrRepr(num_le)).unwrap()
+    }
+}
+
 #[cfg(feature = "plonk")]
 impl Into<BlsScalar> for Fr {
     fn into(self) -> BlsScalar {
