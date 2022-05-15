@@ -11,10 +11,8 @@ fn merge_hash<'a, CS: ConstraintSystem<BellmanFr>>(
     a: AllocatedNum<BellmanFr>,
     b: AllocatedNum<BellmanFr>,
 ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
-    let l = mimc::groth16::double_mimc(cs, a.clone(), b.clone())?;
-    let r = mimc::groth16::double_mimc(cs, b.clone(), a.clone())?;
-    let (l, _) = AllocatedNum::conditionally_reverse(&mut *cs, &l, &r, &select)?;
-    Ok(l)
+    let (l, r) = AllocatedNum::conditionally_reverse(&mut *cs, &a, &b, &select)?;
+    mimc::groth16::double_mimc(cs, l, r)
 }
 
 pub fn calc_root<'a, CS: ConstraintSystem<BellmanFr>>(
