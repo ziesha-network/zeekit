@@ -27,10 +27,10 @@ lazy_static! {
 #[PrimeFieldReprEndianness = "little"]
 pub struct Fr([u64; 4]);
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Fp([u64; 6]);
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Groth16VerifyingKey {
     alpha_g1: (Fp, Fp, bool),
     beta_g1: (Fp, Fp, bool),
@@ -41,7 +41,7 @@ pub struct Groth16VerifyingKey {
     ic: Vec<(Fp, Fp, bool)>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Groth16Proof {
     a: (Fp, Fp, bool),
     b: ((Fp, Fp), (Fp, Fp), bool),
