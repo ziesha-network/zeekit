@@ -49,7 +49,13 @@ pub struct Groth16Proof {
 }
 
 #[cfg(feature = "groth16")]
-pub fn groth16_verify(vk: &Groth16VerifyingKey, proof: &Groth16Proof) -> bool {
+pub fn groth16_verify(
+    vk: &Groth16VerifyingKey,
+    prev_state: Fr,
+    aux_data: Fr,
+    next_state: Fr,
+    proof: &Groth16Proof,
+) -> bool {
     let (vk, proof) = unsafe {
         let alpha_g1 = std::mem::transmute::<(Fp, Fp, bool), BellmanG1>(vk.alpha_g1.clone());
         let beta_g1 = std::mem::transmute::<(Fp, Fp, bool), BellmanG1>(vk.beta_g1.clone());
@@ -83,7 +89,12 @@ pub fn groth16_verify(vk: &Groth16VerifyingKey, proof: &Groth16Proof) -> bool {
             });
         (vk, proof)
     };
-    bellman::groth16::verify_proof(&vk, &proof, &vec![]).is_ok()
+    bellman::groth16::verify_proof(
+        &vk,
+        &proof,
+        &vec![prev_state.into(), aux_data.into(), next_state.into()],
+    )
+    .is_ok()
 }
 
 impl Fr {
