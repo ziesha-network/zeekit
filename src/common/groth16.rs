@@ -55,11 +55,12 @@ pub fn is_equal<'a, CS: ConstraintSystem<BellmanFr>>(
     let out = AllocatedBit::alloc(&mut *cs, a.get_value().map(|a| a.is_zero().into()))?;
     let inv = AllocatedNum::alloc(&mut *cs, || {
         a.get_value()
-            .map(|a| {
-                if a.is_zero().into() {
+            .zip(b.get_value())
+            .map(|(a, b)| {
+                if a == b {
                     BellmanFr::zero()
                 } else {
-                    a.invert().unwrap()
+                    (a - b).invert().unwrap()
                 }
             })
             .ok_or(SynthesisError::AssignmentMissing)
