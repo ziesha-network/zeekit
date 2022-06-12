@@ -10,6 +10,7 @@ use ff::Field;
 use std::collections::HashMap;
 
 pub struct SparseTree {
+    defaults: Vec<Fr>,
     levels: Vec<HashMap<u64, Fr>>,
 }
 
@@ -22,19 +23,24 @@ impl Default for Proof {
 }
 
 impl SparseTree {
-    pub fn new() -> Self {
+    pub fn new(default_leaf: Fr) -> Self {
+        let mut defaults = vec![default_leaf];
+        for i in 0..LOG_TREE_SIZE {
+            defaults.push(mimc::mimc(&[defaults[i], defaults[i]]));
+        }
         Self {
+            defaults,
             levels: vec![HashMap::new(); LOG_TREE_SIZE + 1],
         }
     }
     pub fn root(&self) -> Fr {
-        *self.levels[LOG_TREE_SIZE].get(&0).expect("Tree empty!")
+        self.get(LOG_TREE_SIZE, 0)
     }
     fn get(&self, level: usize, index: u64) -> Fr {
         self.levels[level]
             .get(&index)
             .cloned()
-            .unwrap_or(Fr::zero())
+            .unwrap_or(self.defaults[level])
     }
     pub fn prove(&self, mut index: u64) -> Proof {
         let mut proof = [Fr::zero(); LOG_TREE_SIZE];
