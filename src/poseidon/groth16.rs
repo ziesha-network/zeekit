@@ -181,3 +181,93 @@ pub fn poseidon<'a, CS: ConstraintSystem<BellmanFr>>(
 ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
     unimplemented!();
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::Bls12;
+    use bazuka::zk::ZkScalar;
+    use bellman::gadgets::num::AllocatedNum;
+    use bellman::{groth16, Circuit, ConstraintSystem, SynthesisError};
+    use rand::rngs::OsRng;
+
+    struct TestPoseidon4Circuit {
+        pub a: Option<BellmanFr>,
+        pub b: Option<BellmanFr>,
+        pub c: Option<BellmanFr>,
+        pub d: Option<BellmanFr>,
+        pub out: Option<BellmanFr>,
+    }
+
+    impl Circuit<BellmanFr> for TestPoseidon4Circuit {
+        fn synthesize<CS: ConstraintSystem<BellmanFr>>(
+            self,
+            cs: &mut CS,
+        ) -> Result<(), SynthesisError> {
+            let out = AllocatedNum::alloc(&mut *cs, || {
+                self.out.ok_or(SynthesisError::AssignmentMissing)
+            })?;
+            out.inputize(&mut *cs)?;
+            let a =
+                AllocatedNum::alloc(&mut *cs, || self.a.ok_or(SynthesisError::AssignmentMissing))?;
+            let b =
+                AllocatedNum::alloc(&mut *cs, || self.b.ok_or(SynthesisError::AssignmentMissing))?;
+            let c =
+                AllocatedNum::alloc(&mut *cs, || self.c.ok_or(SynthesisError::AssignmentMissing))?;
+            let d =
+                AllocatedNum::alloc(&mut *cs, || self.d.ok_or(SynthesisError::AssignmentMissing))?;
+
+            let res = poseidon4(&mut *cs, a, b, c, d)?;
+            cs.enforce(
+                || "",
+                |lc| lc + out.get_variable(),
+                |lc| lc + CS::one(),
+                |lc| lc + &res.0,
+            );
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_poseidon4_circuit() {
+        let params = {
+            let c = TestPoseidon4Circuit {
+                a: None,
+                b: None,
+                c: None,
+                d: None,
+                out: None,
+            };
+            groth16::generate_random_parameters::<Bls12, _, _>(c, &mut OsRng).unwrap()
+        };
+
+        let pvk = groth16::prepare_verifying_key(&params.vk);
+
+        let expected = bazuka::zk::poseidon4::poseidon4(
+            ZkScalar::from(123),
+            ZkScalar::from(234),
+            ZkScalar::from(345),
+            ZkScalar::from(456),
+        );
+
+        let c = TestPoseidon4Circuit {
+            a: Some(ZkScalar::from(123).into()),
+            b: Some(ZkScalar::from(234).into()),
+            c: Some(ZkScalar::from(345).into()),
+            d: Some(ZkScalar::from(456).into()),
+            out: Some(expected.into()),
+        };
+        let proof = groth16::create_random_proof(c, &params, &mut OsRng).unwrap();
+        assert!(groth16::verify_proof(&pvk, &proof, &[expected.into()]).is_ok());
+
+        let c = TestPoseidon4Circuit {
+            a: Some(ZkScalar::from(123).into()),
+            b: Some(ZkScalar::from(234).into()),
+            c: Some(ZkScalar::from(345).into()),
+            d: Some(ZkScalar::from(457).into()),
+            out: Some(expected.into()),
+        };
+        let proof = groth16::create_random_proof(c, &params, &mut OsRng).unwrap();
+        assert!(!groth16::verify_proof(&pvk, &proof, &[expected.into()]).is_ok());
+    }
+}
