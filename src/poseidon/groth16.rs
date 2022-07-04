@@ -11,6 +11,12 @@ impl WrappedLc {
         self.0 = self.0.clone() + (num, CS::one());
         self.1 = self.1.map(|v| v + num);
     }
+    fn alloc_num(a: AllocatedNum<BellmanFr>) -> WrappedLc {
+        WrappedLc(
+            LinearCombination::<BellmanFr>::zero() + a.get_variable(),
+            a.get_value(),
+        )
+    }
     fn zero() -> WrappedLc {
         WrappedLc(
             LinearCombination::<BellmanFr>::zero(),
@@ -22,7 +28,7 @@ impl WrappedLc {
 pub fn compress<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: WrappedLc,
-) -> Result<WrappedLc, SynthesisError> {
+) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
     let a_new = AllocatedNum::alloc(&mut *cs, || a.1.ok_or(SynthesisError::AssignmentMissing))?;
     cs.enforce(
         || "",
@@ -30,10 +36,7 @@ pub fn compress<CS: ConstraintSystem<BellmanFr>>(
         |lc| lc + CS::one(),
         |lc| lc + a_new.get_variable(),
     );
-    Ok(WrappedLc(
-        LinearCombination::<BellmanFr>::zero() + a_new.get_variable(),
-        a.1,
-    ))
+    Ok(a_new)
 }
 
 pub fn sbox<'a, CS: ConstraintSystem<BellmanFr>>(
@@ -87,7 +90,7 @@ pub fn partial_round<CS: ConstraintSystem<BellmanFr>>(
 
     vals[0] = sbox(&mut *cs, vals[0].clone())?;
     for i in 1..5 {
-        vals[i] = compress(&mut *cs, vals[i].clone())?;
+        vals[i] = WrappedLc::alloc_num(compress(&mut *cs, vals[i].clone())?);
     }
 
     product_mds(vals)
@@ -131,7 +134,7 @@ pub fn poseidon4<CS: ConstraintSystem<BellmanFr>>(
     b: AllocatedNum<BellmanFr>,
     c: AllocatedNum<BellmanFr>,
     d: AllocatedNum<BellmanFr>,
-) -> Result<WrappedLc, SynthesisError> {
+) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
     let mut elems = [
         WrappedLc(
             LinearCombination::<BellmanFr>::zero(),
@@ -171,7 +174,7 @@ pub fn poseidon4<CS: ConstraintSystem<BellmanFr>>(
         const_offset += 5;
     }
 
-    Ok(elems[1].clone())
+    compress(cs, elems[1].clone())
 }
 
 #[allow(dead_code)]
@@ -222,7 +225,7 @@ mod test {
                 || "",
                 |lc| lc + out.get_variable(),
                 |lc| lc + CS::one(),
-                |lc| lc + &res.0,
+                |lc| lc + res.get_variable(),
             );
             Ok(())
         }
