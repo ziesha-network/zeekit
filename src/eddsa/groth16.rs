@@ -1,7 +1,7 @@
 use crate::BellmanFr;
-use crate::{common, mimc};
+use crate::{common, poseidon};
 
-use super::curve::PointAffine;
+use bazuka::crypto::jubjub::PointAffine;
 
 use bellman::gadgets::boolean::AllocatedBit;
 use bellman::gadgets::num::AllocatedNum;
@@ -150,7 +150,7 @@ pub fn verify_eddsa<'a, CS: ConstraintSystem<BellmanFr>>(
     sig_s: AllocatedNum<BellmanFr>,
 ) -> Result<(), SynthesisError> {
     // h=H(R,A,M)
-    let h = mimc::groth16::mimc(
+    let h = poseidon::groth16::poseidon(
         &mut *cs,
         &[
             sig_r.x.clone(),

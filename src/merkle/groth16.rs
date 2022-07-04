@@ -1,5 +1,5 @@
 use crate::BellmanFr;
-use crate::{common, mimc};
+use crate::{common, poseidon};
 
 use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
@@ -12,7 +12,7 @@ fn merge_hash<'a, CS: ConstraintSystem<BellmanFr>>(
     b: AllocatedNum<BellmanFr>,
 ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
     let (l, r) = AllocatedNum::conditionally_reverse(&mut *cs, &a, &b, &select)?;
-    mimc::groth16::double_mimc(cs, l, r)
+    poseidon::groth16::poseidon(cs, &[l, r])
 }
 
 pub fn calc_root<'a, CS: ConstraintSystem<BellmanFr>>(

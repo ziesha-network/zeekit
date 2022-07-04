@@ -1,78 +1,15 @@
-#[cfg(feature = "plonk")]
-pub mod plonk;
-
 #[cfg(feature = "groth16")]
 pub mod groth16;
 
-use super::config::LOG_TREE_SIZE;
-use crate::{mimc, Fr};
+use bazuka::zk::ZkScalar;
 use ff::Field;
-use std::collections::HashMap;
 
-pub struct SparseTree {
-    defaults: Vec<Fr>,
-    levels: Vec<HashMap<u64, Fr>>,
-}
+const LOG_TREE_SIZE: usize = 3;
 
 #[derive(Debug, Clone)]
-pub struct Proof(pub [Fr; LOG_TREE_SIZE]);
+pub struct Proof(pub [ZkScalar; LOG_TREE_SIZE]);
 impl Default for Proof {
     fn default() -> Self {
-        Self([Fr::zero(); LOG_TREE_SIZE])
-    }
-}
-
-impl SparseTree {
-    pub fn new(default_leaf: Fr) -> Self {
-        let mut defaults = vec![default_leaf];
-        for i in 0..LOG_TREE_SIZE {
-            defaults.push(mimc::mimc(&[defaults[i], defaults[i]]));
-        }
-        Self {
-            defaults,
-            levels: vec![HashMap::new(); LOG_TREE_SIZE + 1],
-        }
-    }
-    pub fn root(&self) -> Fr {
-        self.get(LOG_TREE_SIZE, 0)
-    }
-    fn get(&self, level: usize, index: u64) -> Fr {
-        self.levels[level]
-            .get(&index)
-            .cloned()
-            .unwrap_or(self.defaults[level])
-    }
-    pub fn prove(&self, mut index: u64) -> Proof {
-        let mut proof = [Fr::zero(); LOG_TREE_SIZE];
-        for level in 0..LOG_TREE_SIZE {
-            let neigh = if index & 1 == 0 { index + 1 } else { index - 1 };
-            proof[level] = self.get(level, neigh);
-            index = index >> 1;
-        }
-        Proof(proof)
-    }
-    pub fn verify(mut index: u64, mut value: Fr, proof: Proof, root: Fr) -> bool {
-        for p in proof.0 {
-            value = if index & 1 == 0 {
-                mimc::double_mimc(value, p)
-            } else {
-                mimc::double_mimc(p, value)
-            };
-            index = index >> 1;
-        }
-        value == root
-    }
-    pub fn set(&mut self, mut index: u64, mut value: Fr) {
-        for level in 0..(LOG_TREE_SIZE + 1) {
-            self.levels[level].insert(index, value);
-            let neigh = if index & 1 == 0 { index + 1 } else { index - 1 };
-            let neigh_val = self.get(level, neigh);
-            value = if index & 1 == 0 {
-                mimc::double_mimc(value, neigh_val)
-            } else {
-                mimc::double_mimc(neigh_val, value)
-            };
-            index = index >> 1;
-        }
+        Self([ZkScalar::zero(); LOG_TREE_SIZE])
     }
 }
