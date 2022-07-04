@@ -177,12 +177,48 @@ pub fn poseidon4<CS: ConstraintSystem<BellmanFr>>(
     compress(cs, elems[1].clone())
 }
 
-#[allow(dead_code)]
 pub fn poseidon<'a, CS: ConstraintSystem<BellmanFr>>(
-    _cs: &mut CS,
-    _vals: &[AllocatedNum<BellmanFr>],
+    cs: &mut CS,
+    vals: &[AllocatedNum<BellmanFr>],
 ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
-    unimplemented!();
+    let mut first = vals[0].clone();
+
+    let zero = AllocatedNum::<BellmanFr>::alloc(&mut *cs, || Ok(BellmanFr::zero()))?;
+    cs.enforce(
+        || "",
+        |lc| lc + zero.get_variable(),
+        |lc| lc + CS::one(),
+        |lc| lc,
+    );
+
+    for chunk in vals[1..].chunks(3) {
+        first = match chunk.len() {
+            1 => poseidon4(
+                &mut *cs,
+                first.clone(),
+                chunk[0].clone(),
+                zero.clone(),
+                zero.clone(),
+            )?,
+            2 => poseidon4(
+                &mut *cs,
+                first.clone(),
+                chunk[0].clone(),
+                chunk[1].clone(),
+                zero.clone(),
+            )?,
+            3 => poseidon4(
+                &mut *cs,
+                first.clone(),
+                chunk[0].clone(),
+                chunk[1].clone(),
+                chunk[2].clone(),
+            )?,
+            _ => panic!(),
+        };
+    }
+
+    Ok(first)
 }
 
 #[cfg(test)]
