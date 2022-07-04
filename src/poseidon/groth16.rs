@@ -5,7 +5,7 @@ use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
 
 #[derive(Clone)]
-pub struct WrappedLc(LinearCombination<BellmanFr>, Option<BellmanFr>);
+pub struct WrappedLc(pub LinearCombination<BellmanFr>, pub Option<BellmanFr>);
 impl WrappedLc {
     fn add_assign<CS: ConstraintSystem<BellmanFr>>(&mut self, num: BellmanFr) {
         self.0 = self.0.clone() + (num, CS::one());
@@ -17,6 +17,23 @@ impl WrappedLc {
             Some(BellmanFr::zero()),
         )
     }
+}
+
+pub fn compress<CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    a: WrappedLc,
+) -> Result<WrappedLc, SynthesisError> {
+    let a_new = AllocatedNum::alloc(&mut *cs, || a.1.ok_or(SynthesisError::AssignmentMissing))?;
+    cs.enforce(
+        || "",
+        |lc| lc + &a.0,
+        |lc| lc + CS::one(),
+        |lc| lc + a_new.get_variable(),
+    );
+    Ok(WrappedLc(
+        LinearCombination::<BellmanFr>::zero() + a_new.get_variable(),
+        a.1,
+    ))
 }
 
 pub fn sbox<'a, CS: ConstraintSystem<BellmanFr>>(
@@ -69,6 +86,9 @@ pub fn partial_round<CS: ConstraintSystem<BellmanFr>>(
     add_constants::<CS>(&mut vals, const_offset);
 
     vals[0] = sbox(&mut *cs, vals[0].clone())?;
+    for i in 1..5 {
+        vals[i] = compress(&mut *cs, vals[i].clone())?;
+    }
 
     product_mds(vals)
 }
@@ -99,7 +119,7 @@ pub fn product_mds(vals: [WrappedLc; 5]) -> Result<[WrappedLc; 5], SynthesisErro
         for k in 0..5 {
             let mat_val: BellmanFr = MDS_MATRIX[j][k].into();
             result[j].0 = result[j].0.clone() + (mat_val, &vals[k].0);
-            result[j].1.zip(vals[k].1).map(|(r, v)| r + v * mat_val);
+            result[j].1 = result[j].1.zip(vals[k].1).map(|(r, v)| r + v * mat_val);
         }
     }
     Ok(result)
@@ -111,7 +131,7 @@ pub fn poseidon4<CS: ConstraintSystem<BellmanFr>>(
     b: AllocatedNum<BellmanFr>,
     c: AllocatedNum<BellmanFr>,
     d: AllocatedNum<BellmanFr>,
-) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
+) -> Result<WrappedLc, SynthesisError> {
     let mut elems = [
         WrappedLc(
             LinearCombination::<BellmanFr>::zero(),
@@ -142,14 +162,16 @@ pub fn poseidon4<CS: ConstraintSystem<BellmanFr>>(
     }
 
     for _ in 0..ROUNDSP {
+        elems = partial_round(&mut *cs, const_offset, elems)?;
         const_offset += 5;
     }
 
     for _ in 0..ROUNDSF / 2 {
+        elems = full_round(&mut *cs, const_offset, elems)?;
         const_offset += 5;
     }
 
-    Ok(a)
+    Ok(elems[1].clone())
 }
 
 #[allow(dead_code)]
