@@ -15,22 +15,22 @@ fn merge_hash_poseidon4<'a, CS: ConstraintSystem<BellmanFr>>(
     let or = Boolean::and(&mut *cs, &select.0.not(), &select.1.not())?.not();
 
     // v0 == s0_or_s1 ? p[0] : v
-    let (_, v0) = AllocatedNum::conditionally_reverse(&mut *cs, &p[0], &v, &or)?;
+    let v0 = common::groth16::mux(&mut *cs, &or, &v, &p[0])?;
 
     //v1p == s0 ? v : p[0]
-    let (_, v1p) = AllocatedNum::conditionally_reverse(&mut *cs, &v, &p[0], &select.0)?;
+    let v1p = common::groth16::mux(&mut *cs, &select.0, &p[0], &v)?;
 
     //v1 == s1 ? p[1] : v1p
-    let (_, v1) = AllocatedNum::conditionally_reverse(&mut *cs, &p[1], &v1p, &select.1)?;
+    let v1 = common::groth16::mux(&mut *cs, &select.1, &v1p, &p[1])?;
 
     //v2p == s0 ? p[2] : v
-    let (_, v2p) = AllocatedNum::conditionally_reverse(&mut *cs, &p[2], &v, &select.0)?;
+    let v2p = common::groth16::mux(&mut *cs, &select.0, &v, &p[2])?;
 
     //v2 == s1 ? v2p : p[1]
-    let (_, v2) = AllocatedNum::conditionally_reverse(&mut *cs, &v2p, &p[1], &select.1)?;
+    let v2 = common::groth16::mux(&mut *cs, &select.1, &p[1], &v2p)?;
 
     //v3 == s0_and_s1 ? v : p[2]
-    let (_, v3) = AllocatedNum::conditionally_reverse(&mut *cs, &v, &p[2], &and)?;
+    let v3 = common::groth16::mux(&mut *cs, &and, &p[2], &v)?;
 
     poseidon::groth16::poseidon4(cs, v0, v1, v2, v3)
 }

@@ -9,8 +9,8 @@ use std::ops::AddAssign;
 pub fn mux<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     select: &Boolean,
-    a: AllocatedNum<BellmanFr>,
-    b: AllocatedNum<BellmanFr>,
+    a: &AllocatedNum<BellmanFr>,
+    b: &AllocatedNum<BellmanFr>,
 ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
     Ok(match select {
         Boolean::Is(s) => {
@@ -44,9 +44,9 @@ pub fn mux<CS: ConstraintSystem<BellmanFr>>(
         }
         Boolean::Constant(s) => {
             if *s {
-                b
+                b.clone()
             } else {
-                a
+                a.clone()
             }
         }
     })

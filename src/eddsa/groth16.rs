@@ -79,10 +79,8 @@ pub fn mul_point<'a, CS: ConstraintSystem<BellmanFr>>(
     for bit in bits.iter().rev() {
         result = add_point(&mut *cs, result.clone(), result)?;
         let result_plus_base = add_point(&mut *cs, result.clone(), base.clone())?;
-        let (result_x, _) =
-            AllocatedNum::conditionally_reverse(&mut *cs, &result.x, &result_plus_base.x, &bit)?;
-        let (result_y, _) =
-            AllocatedNum::conditionally_reverse(&mut *cs, &result.y, &result_plus_base.y, &bit)?;
+        let result_x = common::groth16::mux(&mut *cs, &bit, &result.x, &result_plus_base.x)?;
+        let result_y = common::groth16::mux(&mut *cs, &bit, &result.y, &result_plus_base.y)?;
         result = AllocatedPoint {
             x: result_x,
             y: result_y,
