@@ -10,46 +10,44 @@ pub fn mux<CS: ConstraintSystem<BellmanFr>>(
     a: AllocatedNum<BellmanFr>,
     b: AllocatedNum<BellmanFr>,
 ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
-    let ret = AllocatedNum::alloc(&mut *cs, || {
-        match select {
-            Boolean::Is(s) => s
-                .get_value()
-                .and_then(|s| if s { b.get_value() } else { a.get_value() }),
-            Boolean::Not(not_s) => {
-                not_s
-                    .get_value()
-                    .and_then(|not_s| if not_s { a.get_value() } else { b.get_value() })
-            }
-            Boolean::Constant(s) => {
-                if *s {
-                    b.get_value()
-                } else {
-                    a.get_value()
-                }
-            }
-        }
-        .ok_or(SynthesisError::AssignmentMissing)
-    })?;
-    match select {
+    Ok(match select {
         Boolean::Is(s) => {
+            let ret = AllocatedNum::alloc(&mut *cs, || {
+                s.get_value()
+                    .and_then(|s| if s { b.get_value() } else { a.get_value() })
+                    .ok_or(SynthesisError::AssignmentMissing)
+            })?;
             cs.enforce(
                 || "(a - b) * s == a - ret",
                 |lc| lc + a.get_variable() - b.get_variable(),
                 |lc| lc + s.get_variable(),
                 |lc| lc + a.get_variable() - ret.get_variable(),
             );
+            ret
         }
-        Boolean::Not(s) => {
+        Boolean::Not(not_s) => {
+            let ret = AllocatedNum::alloc(&mut *cs, || {
+                not_s
+                    .get_value()
+                    .and_then(|not_s| if not_s { a.get_value() } else { b.get_value() })
+                    .ok_or(SynthesisError::AssignmentMissing)
+            })?;
             cs.enforce(
-                || "(a - b) * s == a - ret",
+                || "(b - a) * not_s == b - ret",
                 |lc| lc + b.get_variable() - a.get_variable(),
-                |lc| lc + s.get_variable(),
+                |lc| lc + not_s.get_variable(),
                 |lc| lc + b.get_variable() - ret.get_variable(),
             );
+            ret
         }
-        Boolean::Constant(_) => {}
-    }
-    Ok(ret)
+        Boolean::Constant(s) => {
+            if *s {
+                b
+            } else {
+                a
+            }
+        }
+    })
 }
 
 pub fn bit_or<'a, CS: ConstraintSystem<BellmanFr>>(
