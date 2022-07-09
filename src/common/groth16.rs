@@ -2,7 +2,9 @@ use crate::BellmanFr;
 
 use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
-use bellman::{ConstraintSystem, SynthesisError};
+use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
+use ff::{Field, PrimeFieldBits};
+use std::ops::AddAssign;
 
 pub fn mux<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
@@ -50,46 +52,175 @@ pub fn mux<CS: ConstraintSystem<BellmanFr>>(
     })
 }
 
-pub fn bit_or<'a, CS: ConstraintSystem<BellmanFr>>(
+// Check if a number is zero, 2 constraints
+pub fn is_zero<'a, CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    a: &Boolean,
-    b: &Boolean,
-) -> Result<Boolean, SynthesisError> {
-    Ok(Boolean::and(&mut *cs, &a.not(), &b.not())?.not())
+    a: AllocatedNum<BellmanFr>,
+) -> Result<AllocatedBit, SynthesisError> {
+    let out = AllocatedBit::alloc(&mut *cs, a.get_value().map(|a| a.is_zero().into()))?;
+    let inv = AllocatedNum::alloc(&mut *cs, || {
+        a.get_value()
+            .map(|a| {
+                if a.is_zero().into() {
+                    BellmanFr::zero()
+                } else {
+                    a.invert().unwrap()
+                }
+            })
+            .ok_or(SynthesisError::AssignmentMissing)
+    })?;
+    cs.enforce(
+        || "calc out",
+        |lc| lc - a.get_variable(),
+        |lc| lc + inv.get_variable(),
+        |lc| lc + out.get_variable() - CS::one(),
+    );
+    cs.enforce(
+        || "calc out",
+        |lc| lc + out.get_variable(),
+        |lc| lc + a.get_variable(),
+        |lc| lc,
+    );
+    Ok(out)
 }
 
-pub fn bit_lt<'a, CS: ConstraintSystem<BellmanFr>>(
+// Check a == b, two constraints
+pub fn is_equal<'a, CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    a: &Boolean,
-    b: &Boolean,
-) -> Result<Boolean, SynthesisError> {
-    Boolean::and(&mut *cs, &a.not(), &b)
+    a: AllocatedNum<BellmanFr>,
+    b: AllocatedNum<BellmanFr>,
+) -> Result<AllocatedBit, SynthesisError> {
+    let out = AllocatedBit::alloc(&mut *cs, a.get_value().map(|a| a.is_zero().into()))?;
+    let inv = AllocatedNum::alloc(&mut *cs, || {
+        a.get_value()
+            .map(|a| {
+                if a.is_zero().into() {
+                    BellmanFr::zero()
+                } else {
+                    a.invert().unwrap()
+                }
+            })
+            .ok_or(SynthesisError::AssignmentMissing)
+    })?;
+    cs.enforce(
+        || "calc out",
+        |lc| lc - a.get_variable() + b.get_variable(),
+        |lc| lc + inv.get_variable(),
+        |lc| lc + out.get_variable() - CS::one(),
+    );
+    cs.enforce(
+        || "calc out",
+        |lc| lc + out.get_variable(),
+        |lc| lc + a.get_variable() - b.get_variable(),
+        |lc| lc,
+    );
+    Ok(out)
 }
 
+// Convert number to binary repr, bits + 1 constraints
+pub fn to_bits<'a, CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    a: AllocatedNum<BellmanFr>,
+    num_bits: usize,
+) -> Result<Vec<AllocatedBit>, SynthesisError> {
+    let mut result = Vec::new();
+    let mut coeff = BellmanFr::one();
+    let mut all = LinearCombination::<BellmanFr>::zero();
+    let bits: Option<Vec<bool>> = a
+        .get_value()
+        .map(|v| v.to_le_bits().iter().map(|b| *b).collect());
+    for i in 0..num_bits {
+        let bit = AllocatedBit::alloc(&mut *cs, bits.as_ref().map(|b| b[i]))?;
+        all = all + (coeff, bit.get_variable());
+        result.push(bit);
+        coeff = coeff.double();
+    }
+    cs.enforce(
+        || "check",
+        |lc| lc + &all,
+        |lc| lc + CS::one(),
+        |lc| lc + a.get_variable(),
+    );
+    Ok(result)
+}
+
+// Convert number to binary repr and negate
+pub fn to_bits_neg<'a, CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    a: AllocatedNum<BellmanFr>,
+    num_bits: usize,
+) -> Result<Vec<AllocatedBit>, SynthesisError> {
+    let mut result = Vec::new();
+    let mut coeff = BellmanFr::one();
+    let mut all = LinearCombination::<BellmanFr>::zero();
+    let two_bits = BellmanFr::from(2).pow_vartime(&[num_bits as u64, 0, 0, 0]);
+    let bits: Option<Vec<bool>> = a
+        .get_value()
+        .map(|v| (two_bits - v).to_le_bits().iter().map(|b| *b).collect());
+    for i in 0..num_bits {
+        let bit = AllocatedBit::alloc(&mut *cs, bits.as_ref().map(|b| b[i]))?;
+        all = all + (coeff, bit.get_variable());
+        result.push(bit);
+        coeff = coeff.double();
+    }
+    let is_zero = is_zero(&mut *cs, a.clone())?;
+    all = all + (two_bits, is_zero.get_variable());
+    cs.enforce(
+        || "neg check",
+        |lc| lc + &all,
+        |lc| lc + CS::one(),
+        |lc| lc + (two_bits, CS::one()) - a.get_variable(),
+    );
+    Ok(result)
+}
+
+// Convert number to u64 and negate
+pub fn sum_u64<'a, CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    a: Vec<AllocatedBit>,
+    b: Vec<AllocatedBit>,
+) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
+    let sum = AllocatedNum::alloc(&mut *cs, || {
+        let mut result = BellmanFr::zero();
+        let mut coeff = BellmanFr::one();
+        for (a_bit, b_bit) in a.iter().zip(b.iter()) {
+            if a_bit.get_value().ok_or(SynthesisError::AssignmentMissing)? {
+                result.add_assign(&coeff);
+            }
+            if b_bit.get_value().ok_or(SynthesisError::AssignmentMissing)? {
+                result.add_assign(&coeff);
+            }
+            coeff = coeff.double();
+        }
+        Ok(result)
+    })?;
+    let mut coeff = BellmanFr::one();
+    let mut all = LinearCombination::<BellmanFr>::zero();
+    for i in 0..64 {
+        all = all + (coeff, a[i].get_variable());
+        all = all + (coeff, b[i].get_variable());
+        coeff = coeff.double();
+    }
+    cs.enforce(
+        || "sum u64s check",
+        |lc| lc + &all,
+        |lc| lc + CS::one(),
+        |lc| lc + sum.get_variable(),
+    );
+    Ok(sum)
+}
+
+// ~200 constraints
 pub fn lte<'a, CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: AllocatedNum<BellmanFr>,
     b: AllocatedNum<BellmanFr>,
-) -> Result<(), SynthesisError> {
-    let a_bits = a.to_bits_le(&mut *cs)?;
-    let b_bits = b.to_bits_le(&mut *cs)?;
-
-    let mut lt = Boolean::Constant(false);
-    let mut gt = Boolean::Constant(false);
-    for (a, b) in a_bits.into_iter().zip(b_bits.into_iter()).rev() {
-        let a_lt_b = bit_lt(&mut *cs, &a, &b)?;
-        let not_gt_and_a_lt_b = Boolean::and(&mut *cs, &gt.not(), &a_lt_b)?;
-        lt = bit_or(&mut *cs, &lt, &not_gt_and_a_lt_b)?;
-
-        let b_lt_a = bit_lt(&mut *cs, &b, &a)?;
-        let not_lt_and_b_lt_a = Boolean::and(&mut *cs, &lt.not(), &b_lt_a)?;
-        gt = bit_or(&mut *cs, &gt, &not_lt_and_b_lt_a)?;
-    }
-
-    let not_lt_and_not_gt = Boolean::and(&mut *cs, &lt.not(), &gt.not())?;
-    let lt_or_not_lt_and_not_gt = bit_or(&mut *cs, &lt, &not_lt_and_not_gt)?;
-    Boolean::enforce_equal(&mut *cs, &lt_or_not_lt_and_not_gt, &Boolean::Constant(true))?;
-    Ok(())
+) -> Result<AllocatedBit, SynthesisError> {
+    let a = to_bits(&mut *cs, a, 64)?;
+    let b_neg = to_bits_neg(&mut *cs, b, 64)?;
+    let c = sum_u64(&mut *cs, a, b_neg)?;
+    let c_bits = to_bits(&mut *cs, c, 65)?;
+    Ok(c_bits[63].clone())
 }
 
 pub fn assert_equal<'a, CS: ConstraintSystem<BellmanFr>>(
