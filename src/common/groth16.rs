@@ -4,6 +4,54 @@ use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, SynthesisError};
 
+pub fn mux<CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    select: &Boolean,
+    a: AllocatedNum<BellmanFr>,
+    b: AllocatedNum<BellmanFr>,
+) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
+    let ret = AllocatedNum::alloc(&mut *cs, || {
+        match select {
+            Boolean::Is(s) => s
+                .get_value()
+                .and_then(|s| if s { b.get_value() } else { a.get_value() }),
+            Boolean::Not(not_s) => {
+                not_s
+                    .get_value()
+                    .and_then(|not_s| if not_s { a.get_value() } else { b.get_value() })
+            }
+            Boolean::Constant(s) => {
+                if *s {
+                    b.get_value()
+                } else {
+                    a.get_value()
+                }
+            }
+        }
+        .ok_or(SynthesisError::AssignmentMissing)
+    })?;
+    match select {
+        Boolean::Is(s) => {
+            cs.enforce(
+                || "(a - b) * s == a - ret",
+                |lc| lc + a.get_variable() - b.get_variable(),
+                |lc| lc + s.get_variable(),
+                |lc| lc + a.get_variable() - ret.get_variable(),
+            );
+        }
+        Boolean::Not(s) => {
+            cs.enforce(
+                || "(a - b) * s == a - ret",
+                |lc| lc + b.get_variable() - a.get_variable(),
+                |lc| lc + s.get_variable(),
+                |lc| lc + b.get_variable() - ret.get_variable(),
+            );
+        }
+        Boolean::Constant(_) => {}
+    }
+    Ok(ret)
+}
+
 pub fn bit_or<'a, CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: &Boolean,
