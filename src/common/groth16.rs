@@ -6,6 +6,58 @@ use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::{Field, PrimeFieldBits};
 use std::ops::AddAssign;
 
+pub fn mux_zero<CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    enable: &Boolean,
+    val: &AllocatedNum<BellmanFr>,
+) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
+    Ok(match enable {
+        Boolean::Is(enable) => {
+            let ret = AllocatedNum::alloc(&mut *cs, || {
+                enable
+                    .get_value()
+                    .and_then(|enable| {
+                        if enable {
+                            val.get_value()
+                        } else {
+                            Some(BellmanFr::zero())
+                        }
+                    })
+                    .ok_or(SynthesisError::AssignmentMissing)
+            })?;
+            cs.enforce(
+                || "val * enable == ret",
+                |lc| lc + val.get_variable(),
+                |lc| lc + enable.get_variable(),
+                |lc| lc + ret.get_variable(),
+            );
+            ret
+        }
+        Boolean::Not(not_enable) => {
+            let ret = AllocatedNum::alloc(&mut *cs, || {
+                not_enable
+                    .get_value()
+                    .and_then(|not_enable| {
+                        if not_enable {
+                            Some(BellmanFr::zero())
+                        } else {
+                            val.get_value()
+                        }
+                    })
+                    .ok_or(SynthesisError::AssignmentMissing)
+            })?;
+            cs.enforce(
+                || "val * not_enable = val - ret",
+                |lc| lc + val.get_variable(),
+                |lc| lc + not_enable.get_variable(),
+                |lc| lc + val.get_variable() - ret.get_variable(),
+            );
+            ret
+        }
+        Boolean::Constant(_) => unimplemented!(),
+    })
+}
+
 pub fn mux<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     select: &Boolean,

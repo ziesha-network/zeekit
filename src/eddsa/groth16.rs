@@ -3,7 +3,7 @@ use crate::{common, poseidon};
 
 use bazuka::crypto::jubjub::{PointAffine, A, D};
 
-use bellman::gadgets::boolean::AllocatedBit;
+use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, SynthesisError};
 use std::ops::*;
@@ -71,12 +71,12 @@ pub fn mul_point<'a, CS: ConstraintSystem<BellmanFr>>(
     base: AllocatedPoint,
     b: AllocatedNum<BellmanFr>,
 ) -> Result<AllocatedPoint, SynthesisError> {
-    let bits = b.to_bits_le(&mut *cs)?;
+    let bits: Vec<Boolean> = b.to_bits_le_strict(&mut *cs)?.into_iter().rev().collect();
     let mut result = AllocatedPoint {
-        x: AllocatedNum::alloc(&mut *cs, || Ok(BellmanFr::zero()))?,
-        y: AllocatedNum::alloc(&mut *cs, || Ok(BellmanFr::one()))?,
+        x: common::groth16::mux_zero(&mut *cs, &bits[0], &base.x)?,
+        y: common::groth16::mux_zero(&mut *cs, &bits[0], &base.y)?,
     };
-    for bit in bits.iter().rev() {
+    for bit in bits[1..].iter() {
         result = add_point(&mut *cs, result.clone(), result)?;
         let result_plus_base = add_point(&mut *cs, result.clone(), base.clone())?;
         let result_x = common::groth16::mux(&mut *cs, &bit, &result.x, &result_plus_base.x)?;
