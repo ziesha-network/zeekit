@@ -6,63 +6,49 @@ use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::{Field, PrimeFieldBits};
 use std::ops::AddAssign;
 
-pub fn mux_zero<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    enable: &Boolean,
-    val: &AllocatedNum<BellmanFr>,
-) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
-    Ok(match enable {
-        Boolean::Is(enable) => {
-            let ret = AllocatedNum::alloc(&mut *cs, || {
-                enable
-                    .get_value()
-                    .and_then(|enable| {
-                        if enable {
-                            val.get_value()
-                        } else {
-                            Some(BellmanFr::zero())
-                        }
-                    })
-                    .ok_or(SynthesisError::AssignmentMissing)
-            })?;
-            cs.enforce(
-                || "val * enable == ret",
-                |lc| lc + val.get_variable(),
-                |lc| lc + enable.get_variable(),
-                |lc| lc + ret.get_variable(),
-            );
-            ret
-        }
-        Boolean::Not(not_enable) => {
-            let ret = AllocatedNum::alloc(&mut *cs, || {
-                not_enable
-                    .get_value()
-                    .and_then(|not_enable| {
-                        if not_enable {
-                            Some(BellmanFr::zero())
-                        } else {
-                            val.get_value()
-                        }
-                    })
-                    .ok_or(SynthesisError::AssignmentMissing)
-            })?;
-            cs.enforce(
-                || "val * not_enable = val - ret",
-                |lc| lc + val.get_variable(),
-                |lc| lc + not_enable.get_variable(),
-                |lc| lc + val.get_variable() - ret.get_variable(),
-            );
-            ret
-        }
-        Boolean::Constant(_) => unimplemented!(),
-    })
+#[derive(Clone)]
+pub struct WrappedLc(pub LinearCombination<BellmanFr>, pub Option<BellmanFr>);
+impl WrappedLc {
+    pub fn get_value(&self) -> Option<BellmanFr> {
+        self.1
+    }
+    pub fn add_constant<CS: ConstraintSystem<BellmanFr>>(&mut self, num: BellmanFr) {
+        self.0 = self.0.clone() + (num, CS::one());
+        self.1 = self.1.map(|v| v + num);
+    }
+    pub fn add_num(&mut self, num: &AllocatedNum<BellmanFr>) {
+        self.0 = self.0.clone() + num.get_variable();
+        self.1 = if let Some(v) = self.1 {
+            num.get_value().map(|n| n + v)
+        } else {
+            None
+        };
+    }
+    pub fn alloc_num(a: AllocatedNum<BellmanFr>) -> WrappedLc {
+        WrappedLc(
+            LinearCombination::<BellmanFr>::zero() + a.get_variable(),
+            a.get_value(),
+        )
+    }
+    pub fn constant<CS: ConstraintSystem<BellmanFr>>(v: BellmanFr) -> WrappedLc {
+        WrappedLc(
+            LinearCombination::<BellmanFr>::zero() + (v, CS::one()),
+            Some(v),
+        )
+    }
+    pub fn zero() -> WrappedLc {
+        WrappedLc(
+            LinearCombination::<BellmanFr>::zero(),
+            Some(BellmanFr::zero()),
+        )
+    }
 }
 
 pub fn mux<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     select: &Boolean,
-    a: &AllocatedNum<BellmanFr>,
-    b: &AllocatedNum<BellmanFr>,
+    a: &WrappedLc,
+    b: &WrappedLc,
 ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
     Ok(match select {
         Boolean::Is(s) => {
@@ -73,9 +59,9 @@ pub fn mux<CS: ConstraintSystem<BellmanFr>>(
             })?;
             cs.enforce(
                 || "(a - b) * s == a - ret",
-                |lc| lc + a.get_variable() - b.get_variable(),
+                |lc| lc + &a.0 - &b.0,
                 |lc| lc + s.get_variable(),
-                |lc| lc + a.get_variable() - ret.get_variable(),
+                |lc| lc + &a.0 - ret.get_variable(),
             );
             ret
         }
@@ -88,24 +74,20 @@ pub fn mux<CS: ConstraintSystem<BellmanFr>>(
             })?;
             cs.enforce(
                 || "(b - a) * not_s == b - ret",
-                |lc| lc + b.get_variable() - a.get_variable(),
+                |lc| lc + &b.0 - &a.0,
                 |lc| lc + not_s.get_variable(),
-                |lc| lc + b.get_variable() - ret.get_variable(),
+                |lc| lc + &b.0 - ret.get_variable(),
             );
             ret
         }
-        Boolean::Constant(s) => {
-            if *s {
-                b.clone()
-            } else {
-                a.clone()
-            }
+        Boolean::Constant(_) => {
+            unimplemented!();
         }
     })
 }
 
 // Check if a number is zero, 2 constraints
-pub fn is_zero<'a, CS: ConstraintSystem<BellmanFr>>(
+pub fn is_zero<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: AllocatedNum<BellmanFr>,
 ) -> Result<AllocatedBit, SynthesisError> {
@@ -137,7 +119,7 @@ pub fn is_zero<'a, CS: ConstraintSystem<BellmanFr>>(
 }
 
 // Check a == b, two constraints
-pub fn is_equal<'a, CS: ConstraintSystem<BellmanFr>>(
+pub fn is_equal<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: AllocatedNum<BellmanFr>,
     b: AllocatedNum<BellmanFr>,
@@ -170,7 +152,7 @@ pub fn is_equal<'a, CS: ConstraintSystem<BellmanFr>>(
 }
 
 // Convert number to binary repr, bits + 1 constraints
-pub fn to_bits<'a, CS: ConstraintSystem<BellmanFr>>(
+pub fn to_bits<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: AllocatedNum<BellmanFr>,
     num_bits: usize,
@@ -197,7 +179,7 @@ pub fn to_bits<'a, CS: ConstraintSystem<BellmanFr>>(
 }
 
 // Convert number to binary repr and negate
-pub fn to_bits_neg<'a, CS: ConstraintSystem<BellmanFr>>(
+pub fn to_bits_neg<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: AllocatedNum<BellmanFr>,
     num_bits: usize,
@@ -227,7 +209,7 @@ pub fn to_bits_neg<'a, CS: ConstraintSystem<BellmanFr>>(
 }
 
 // Convert number to u64 and negate
-pub fn sum_u64<'a, CS: ConstraintSystem<BellmanFr>>(
+pub fn sum_u64<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: Vec<AllocatedBit>,
     b: Vec<AllocatedBit>,
@@ -263,7 +245,7 @@ pub fn sum_u64<'a, CS: ConstraintSystem<BellmanFr>>(
 }
 
 // ~200 constraints
-pub fn lte<'a, CS: ConstraintSystem<BellmanFr>>(
+pub fn lte<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: AllocatedNum<BellmanFr>,
     b: AllocatedNum<BellmanFr>,
@@ -275,7 +257,7 @@ pub fn lte<'a, CS: ConstraintSystem<BellmanFr>>(
     Ok(c_bits[63].clone())
 }
 
-pub fn assert_equal<'a, CS: ConstraintSystem<BellmanFr>>(
+pub fn assert_equal<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     enabled: AllocatedBit,
     a: AllocatedNum<BellmanFr>,

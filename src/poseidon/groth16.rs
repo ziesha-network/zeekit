@@ -1,29 +1,9 @@
+use crate::common::groth16::WrappedLc;
 use crate::BellmanFr;
 
 use bazuka::zk::poseidon4::{MDS_MATRIX, ROUNDSF, ROUNDSP, ROUND_CONSTANTS};
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
-
-#[derive(Clone)]
-pub struct WrappedLc(pub LinearCombination<BellmanFr>, pub Option<BellmanFr>);
-impl WrappedLc {
-    fn add_assign<CS: ConstraintSystem<BellmanFr>>(&mut self, num: BellmanFr) {
-        self.0 = self.0.clone() + (num, CS::one());
-        self.1 = self.1.map(|v| v + num);
-    }
-    fn alloc_num(a: AllocatedNum<BellmanFr>) -> WrappedLc {
-        WrappedLc(
-            LinearCombination::<BellmanFr>::zero() + a.get_variable(),
-            a.get_value(),
-        )
-    }
-    fn zero() -> WrappedLc {
-        WrappedLc(
-            LinearCombination::<BellmanFr>::zero(),
-            Some(BellmanFr::zero()),
-        )
-    }
-}
 
 pub fn compress<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
@@ -39,7 +19,7 @@ pub fn compress<CS: ConstraintSystem<BellmanFr>>(
     Ok(a_new)
 }
 
-pub fn sbox<'a, CS: ConstraintSystem<BellmanFr>>(
+pub fn sbox<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: WrappedLc,
 ) -> Result<WrappedLc, SynthesisError> {
@@ -77,7 +57,7 @@ pub fn add_constants<CS: ConstraintSystem<BellmanFr>>(
     const_offset: usize,
 ) {
     for i in 0..5 {
-        vals[i].add_assign::<CS>(ROUND_CONSTANTS[const_offset + i].into());
+        vals[i].add_constant::<CS>(ROUND_CONSTANTS[const_offset + i].into());
     }
 }
 
@@ -177,7 +157,7 @@ pub fn poseidon4<CS: ConstraintSystem<BellmanFr>>(
     compress(cs, elems[1].clone())
 }
 
-pub fn poseidon<'a, CS: ConstraintSystem<BellmanFr>>(
+pub fn poseidon<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     vals: &[AllocatedNum<BellmanFr>],
 ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {

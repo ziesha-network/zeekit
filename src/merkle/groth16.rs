@@ -1,3 +1,4 @@
+use crate::common::groth16::WrappedLc;
 use crate::BellmanFr;
 use crate::{common, poseidon};
 
@@ -5,7 +6,7 @@ use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, SynthesisError};
 
-fn merge_hash_poseidon4<'a, CS: ConstraintSystem<BellmanFr>>(
+fn merge_hash_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     select: (Boolean, Boolean),
     v: AllocatedNum<BellmanFr>,
@@ -15,27 +16,57 @@ fn merge_hash_poseidon4<'a, CS: ConstraintSystem<BellmanFr>>(
     let or = Boolean::and(&mut *cs, &select.0.not(), &select.1.not())?.not();
 
     // v0 == s0_or_s1 ? p[0] : v
-    let v0 = common::groth16::mux(&mut *cs, &or, &v, &p[0])?;
+    let v0 = common::groth16::mux(
+        &mut *cs,
+        &or,
+        &WrappedLc::alloc_num(v.clone()),
+        &WrappedLc::alloc_num(p[0].clone()),
+    )?;
 
     //v1p == s0 ? v : p[0]
-    let v1p = common::groth16::mux(&mut *cs, &select.0, &p[0], &v)?;
+    let v1p = common::groth16::mux(
+        &mut *cs,
+        &select.0,
+        &WrappedLc::alloc_num(p[0].clone()),
+        &WrappedLc::alloc_num(v.clone()),
+    )?;
 
     //v1 == s1 ? p[1] : v1p
-    let v1 = common::groth16::mux(&mut *cs, &select.1, &v1p, &p[1])?;
+    let v1 = common::groth16::mux(
+        &mut *cs,
+        &select.1,
+        &WrappedLc::alloc_num(v1p),
+        &WrappedLc::alloc_num(p[1].clone()),
+    )?;
 
     //v2p == s0 ? p[2] : v
-    let v2p = common::groth16::mux(&mut *cs, &select.0, &v, &p[2])?;
+    let v2p = common::groth16::mux(
+        &mut *cs,
+        &select.0,
+        &WrappedLc::alloc_num(v.clone()),
+        &WrappedLc::alloc_num(p[2].clone()),
+    )?;
 
     //v2 == s1 ? v2p : p[1]
-    let v2 = common::groth16::mux(&mut *cs, &select.1, &p[1], &v2p)?;
+    let v2 = common::groth16::mux(
+        &mut *cs,
+        &select.1,
+        &WrappedLc::alloc_num(p[1].clone()),
+        &WrappedLc::alloc_num(v2p),
+    )?;
 
     //v3 == s0_and_s1 ? v : p[2]
-    let v3 = common::groth16::mux(&mut *cs, &and, &p[2], &v)?;
+    let v3 = common::groth16::mux(
+        &mut *cs,
+        &and,
+        &WrappedLc::alloc_num(p[2].clone()),
+        &WrappedLc::alloc_num(v),
+    )?;
 
     poseidon::groth16::poseidon4(cs, v0, v1, v2, v3)
 }
 
-pub fn calc_root_poseidon4<'a, CS: ConstraintSystem<BellmanFr>>(
+pub fn calc_root_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     index: AllocatedNum<BellmanFr>,
     val: AllocatedNum<BellmanFr>,
@@ -49,7 +80,7 @@ pub fn calc_root_poseidon4<'a, CS: ConstraintSystem<BellmanFr>>(
     Ok(curr)
 }
 
-pub fn check_proof_poseidon4<'a, CS: ConstraintSystem<BellmanFr>>(
+pub fn check_proof_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     enabled: AllocatedBit,
     index: AllocatedNum<BellmanFr>,
