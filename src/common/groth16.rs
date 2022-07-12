@@ -151,6 +151,36 @@ pub fn is_equal<CS: ConstraintSystem<BellmanFr>>(
     Ok(out)
 }
 
+pub fn from_bits<CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    bits: Vec<AllocatedBit>,
+) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
+    let sum = AllocatedNum::alloc(&mut *cs, || {
+        let mut result = BellmanFr::zero();
+        let mut coeff = BellmanFr::one();
+        for bit in bits.iter() {
+            if bit.get_value().ok_or(SynthesisError::AssignmentMissing)? {
+                result.add_assign(&coeff);
+            }
+            coeff = coeff.double();
+        }
+        Ok(result)
+    })?;
+    let mut coeff = BellmanFr::one();
+    let mut all = LinearCombination::<BellmanFr>::zero();
+    for bit in bits.iter() {
+        all = all + (coeff, bit.get_variable());
+        coeff = coeff.double();
+    }
+    cs.enforce(
+        || "sum check",
+        |lc| lc + &all,
+        |lc| lc + CS::one(),
+        |lc| lc + sum.get_variable(),
+    );
+    Ok(sum)
+}
+
 // Convert number to binary repr, bits + 1 constraints
 pub fn to_bits<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
@@ -209,7 +239,7 @@ pub fn to_bits_neg<CS: ConstraintSystem<BellmanFr>>(
 }
 
 // Convert number to u64 and negate
-pub fn sum_u64<CS: ConstraintSystem<BellmanFr>>(
+pub fn sum_bits<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: Vec<AllocatedBit>,
     b: Vec<AllocatedBit>,
@@ -230,13 +260,13 @@ pub fn sum_u64<CS: ConstraintSystem<BellmanFr>>(
     })?;
     let mut coeff = BellmanFr::one();
     let mut all = LinearCombination::<BellmanFr>::zero();
-    for i in 0..64 {
-        all = all + (coeff, a[i].get_variable());
-        all = all + (coeff, b[i].get_variable());
+    for (a_bit, b_bit) in a.iter().zip(b.iter()) {
+        all = all + (coeff, a_bit.get_variable());
+        all = all + (coeff, b_bit.get_variable());
         coeff = coeff.double();
     }
     cs.enforce(
-        || "sum u64s check",
+        || "sum check",
         |lc| lc + &all,
         |lc| lc + CS::one(),
         |lc| lc + sum.get_variable(),
@@ -252,7 +282,7 @@ pub fn lte<CS: ConstraintSystem<BellmanFr>>(
 ) -> Result<AllocatedBit, SynthesisError> {
     let a = to_bits(&mut *cs, a, 64)?;
     let b_neg = to_bits_neg(&mut *cs, b, 64)?;
-    let c = sum_u64(&mut *cs, a, b_neg)?;
+    let c = sum_bits(&mut *cs, a, b_neg)?;
     let c_bits = to_bits(&mut *cs, c, 65)?;
     Ok(c_bits[63].clone())
 }
