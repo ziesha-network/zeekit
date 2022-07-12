@@ -104,7 +104,10 @@ pub fn add_const_point<CS: ConstraintSystem<BellmanFr>>(
         || "y_1 - y_2 == sum_y * (1 - common)",
         |lc| lc + CS::one() - (curve_d_bx_by, common.get_variable()),
         |lc| lc + sum_y.get_variable(),
-        |lc| lc + (by, a.y.get_variable()) - (A.clone().into(), a.x.get_variable()),
+        |lc| {
+            lc + (by, a.y.get_variable())
+                - (Into::<BellmanFr>::into(A.clone()) * bx, a.x.get_variable())
+        },
     );
 
     Ok(AllocatedPoint { x: sum_x, y: sum_y })
@@ -126,7 +129,7 @@ pub fn mul_point<CS: ConstraintSystem<BellmanFr>>(
         y: common::groth16::mux(
             &mut *cs,
             &bits[0],
-            &WrappedLc::zero(),
+            &WrappedLc::constant::<CS>(BellmanFr::one()),
             &WrappedLc::alloc_num(base.y.clone()),
         )?,
     };
@@ -168,7 +171,7 @@ pub fn mul_generator_point<CS: ConstraintSystem<BellmanFr>>(
         y: common::groth16::mux(
             &mut *cs,
             &bits[0],
-            &WrappedLc::zero(),
+            &WrappedLc::constant::<CS>(BellmanFr::one()),
             &WrappedLc::constant::<CS>(BASE.1.into()),
         )?,
     };
