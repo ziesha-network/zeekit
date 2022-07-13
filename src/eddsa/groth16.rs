@@ -2,7 +2,7 @@ use crate::common::groth16::WrappedLc;
 use crate::BellmanFr;
 use crate::{common, poseidon};
 
-use bazuka::crypto::jubjub::{PointAffine, A, BASE, D};
+use bazuka::crypto::jubjub::{PointAffine, A, BASE_COFACTOR, D};
 
 use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
@@ -156,8 +156,9 @@ pub fn mul_point<CS: ConstraintSystem<BellmanFr>>(
     Ok(result)
 }
 
-pub fn mul_generator_point<CS: ConstraintSystem<BellmanFr>>(
+pub fn mul_const_point<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
+    base: PointAffine,
     b: AllocatedNum<BellmanFr>,
 ) -> Result<AllocatedPoint, SynthesisError> {
     let bits: Vec<Boolean> = b.to_bits_le_strict(&mut *cs)?.into_iter().rev().collect();
@@ -166,18 +167,18 @@ pub fn mul_generator_point<CS: ConstraintSystem<BellmanFr>>(
             &mut *cs,
             &bits[0],
             &WrappedLc::zero(),
-            &WrappedLc::constant::<CS>(BASE.0.into()),
+            &WrappedLc::constant::<CS>(base.0.into()),
         )?,
         y: common::groth16::mux(
             &mut *cs,
             &bits[0],
             &WrappedLc::constant::<CS>(BellmanFr::one()),
-            &WrappedLc::constant::<CS>(BASE.1.into()),
+            &WrappedLc::constant::<CS>(base.1.into()),
         )?,
     };
     for bit in bits[1..].iter() {
         result = add_point(&mut *cs, result.clone(), result)?;
-        let result_plus_base = add_const_point(&mut *cs, result.clone(), BASE.clone())?;
+        let result_plus_base = add_const_point(&mut *cs, result.clone(), base.clone())?;
         let result_x = common::groth16::mux(
             &mut *cs,
             &bit,
@@ -229,12 +230,11 @@ pub fn verify_eddsa<CS: ConstraintSystem<BellmanFr>>(
         ],
     )?;
 
-    let sb = mul_generator_point(&mut *cs, sig_s)?;
-    //sb = mul_cofactor(&mut *cs, sb)?;
+    let sb = mul_const_point(&mut *cs, BASE_COFACTOR.clone(), sig_s)?;
 
     let mut r_plus_ha = mul_point(&mut *cs, pk.clone(), h)?;
     r_plus_ha = add_point(&mut *cs, r_plus_ha.clone(), sig_r)?;
-    //r_plus_ha = mul_cofactor(&mut *cs, r_plus_ha)?;
+    r_plus_ha = mul_cofactor(&mut *cs, r_plus_ha)?;
 
     common::groth16::assert_equal(cs, enabled.clone(), r_plus_ha.x, sb.x)?;
     common::groth16::assert_equal(cs, enabled, r_plus_ha.y, sb.y)?;
