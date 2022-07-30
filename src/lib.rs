@@ -5,3 +5,4 @@ pub mod common;
 pub mod eddsa;
 pub mod merkle;
 pub mod poseidon;
+pub mod reveal;
