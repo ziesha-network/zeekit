@@ -7,6 +7,7 @@ use bazuka::crypto::jubjub::{PointAffine, A, BASE_COFACTOR, D};
 use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, SynthesisError};
+use ff::Field;
 use std::ops::*;
 
 #[derive(Clone)]
@@ -25,9 +26,14 @@ pub fn add_point<CS: ConstraintSystem<BellmanFr>>(
             .zip(a.y.get_value())
             .zip(b.x.get_value().zip(b.y.get_value()))
             .map(|((a_x, a_y), (b_x, b_y))| {
-                let mut sum = PointAffine(a_x.into(), a_y.into());
-                sum.add_assign(&PointAffine(b_x.into(), b_y.into()));
-                sum
+                if a_x.is_zero().into() && a_y.is_zero().into() {
+                    // If empty, do not need to calculate
+                    Default::default()
+                } else {
+                    let mut sum = PointAffine(a_x.into(), a_y.into());
+                    sum.add_assign(&PointAffine(b_x.into(), b_y.into()));
+                    sum
+                }
             });
     let sum_x = AllocatedNum::alloc(&mut *cs, || {
         sum_value
