@@ -9,6 +9,9 @@ use std::ops::AddAssign;
 #[derive(Clone)]
 pub struct WrappedLc(pub LinearCombination<BellmanFr>, pub Option<BellmanFr>);
 impl WrappedLc {
+    pub fn get_lc(&self) -> &LinearCombination<BellmanFr> {
+        &self.0
+    }
     pub fn get_value(&self) -> Option<BellmanFr> {
         self.1
     }
