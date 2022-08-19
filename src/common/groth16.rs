@@ -279,19 +279,33 @@ pub fn not<CS: ConstraintSystem<BellmanFr>>(
     Ok(bit)
 }
 
-// ~270 constraints
+// ~198 constraints
 pub fn lt<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     num_bits: usize,
     a: AllocatedNum<BellmanFr>,
     b: AllocatedNum<BellmanFr>,
 ) -> Result<AllocatedBit, SynthesisError> {
-    let a = to_bits(&mut *cs, a, num_bits)?; // Convert a to num_bits unsigned number
-    to_bits(&mut *cs, b.clone(), num_bits)?; // Make sure b is a num_bits unsigned number
-    let b_neg = to_bits_and_neg(&mut *cs, b, num_bits + 1)?; // Convert b to num_bits + 1 negated signed number
-    let c = sum_bits(&mut *cs, a, b_neg)?;
-    let c_bits = to_bits(&mut *cs, c, num_bits + 2)?; // Sum of two (num_bits + 1) bits number is a (num_bits + 2) bits number
-    Ok(c_bits[num_bits].clone()) // Check if number is negative
+    to_bits(&mut *cs, a.clone(), num_bits)?; // Make sure a has only num_bits bits
+    to_bits(&mut *cs, b.clone(), num_bits)?; // Make sure b has only num_bits bits
+
+    // Imagine a and b are two sigend (num_bits + 1) bits numbers
+    let two_bits = BellmanFr::from(2).pow_vartime(&[num_bits as u64 + 1, 0, 0, 0]);
+    let sub = AllocatedNum::alloc(&mut *cs, || {
+        Ok(a.get_value()
+            .zip(b.get_value())
+            .map(|(a, b)| a - b + two_bits)
+            .ok_or(SynthesisError::AssignmentMissing)?)
+    })?;
+    cs.enforce(
+        || "",
+        |lc| lc + a.get_variable() - b.get_variable() + (two_bits, CS::one()),
+        |lc| lc + CS::one(),
+        |lc| lc + sub.get_variable(),
+    );
+
+    let sub_bits = to_bits(&mut *cs, sub, num_bits + 2)?;
+    Ok(sub_bits[num_bits].clone())
 }
 
 pub fn gt<CS: ConstraintSystem<BellmanFr>>(
