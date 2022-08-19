@@ -279,18 +279,19 @@ pub fn not<CS: ConstraintSystem<BellmanFr>>(
     Ok(bit)
 }
 
-// ~200 constraints
+// ~270 constraints
 pub fn lt<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     num_bits: usize,
     a: AllocatedNum<BellmanFr>,
     b: AllocatedNum<BellmanFr>,
 ) -> Result<AllocatedBit, SynthesisError> {
-    let a = to_bits(&mut *cs, a, num_bits)?;
-    let b_neg = to_bits_and_neg(&mut *cs, b, num_bits)?;
+    let a = to_bits(&mut *cs, a, num_bits)?; // Convert a to num_bits unsigned number
+    to_bits(&mut *cs, b.clone(), num_bits)?; // Make sure b is a num_bits unsigned number
+    let b_neg = to_bits_and_neg(&mut *cs, b, num_bits + 1)?; // Convert b to num_bits + 1 negated signed number
     let c = sum_bits(&mut *cs, a, b_neg)?;
-    let c_bits = to_bits(&mut *cs, c, num_bits + 1)?;
-    Ok(c_bits[num_bits - 1].clone())
+    let c_bits = to_bits(&mut *cs, c, num_bits + 2)?; // Sum of two (num_bits + 1) bits number is a (num_bits + 2) bits number
+    Ok(c_bits[num_bits].clone()) // Check if number is negative
 }
 
 pub fn gt<CS: ConstraintSystem<BellmanFr>>(
@@ -507,6 +508,12 @@ mod test {
         let pvk = groth16::prepare_verifying_key(&params.vk);
 
         for (a, b, eq, expected) in [
+            (0, 0, true, true),
+            (0, 0, false, false),
+            (0, 123, true, true),
+            (0, 123, false, false),
+            (123, 0, true, false),
+            (123, 0, false, true),
             (122, 123, true, true),
             (123, 123, true, true),
             (124, 123, false, true),
@@ -522,8 +529,12 @@ mod test {
             (254, 255, true, true),
             (255, 256, false, false),
             (255, 256, true, false),
+            (256, 255, false, false),
             (256, 255, true, false),
-            (256, 255, true, false),
+            (255, 257, false, false),
+            (255, 257, true, false),
+            (257, 255, false, false),
+            (257, 255, true, false),
         ] {
             let c = TestLteCircuit {
                 num_bits: 8,
