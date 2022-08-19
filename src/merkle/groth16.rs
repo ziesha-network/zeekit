@@ -97,7 +97,9 @@ pub fn check_proof_poseidon4<CS: ConstraintSystem<BellmanFr>>(
 mod test {
     use super::*;
     use crate::Bls12;
-    use bazuka::zk::{PoseidonHasher, ZkDataLocator, ZkScalar, ZkStateBuilder, ZkStateModel};
+    use bazuka::zk::{
+        PoseidonHasher, ZkDataLocator, ZkDeltaPairs, ZkScalar, ZkStateBuilder, ZkStateModel,
+    };
     use bellman::gadgets::num::AllocatedNum;
     use bellman::{groth16, Circuit, ConstraintSystem, SynthesisError};
     use ff::Field;
@@ -172,7 +174,9 @@ mod test {
         let mut builder = ZkStateBuilder::<PoseidonHasher>::new(model);
         for i in 0..256 {
             builder
-                .set(ZkDataLocator(vec![i]), ZkScalar::from(i as u64))
+                .batch_set(&ZkDeltaPairs(
+                    [(ZkDataLocator(vec![i]), Some(ZkScalar::from(i as u64)))].into(),
+                ))
                 .unwrap();
         }
         for i in 0..256 {
