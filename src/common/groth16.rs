@@ -192,7 +192,7 @@ pub fn to_bits<CS: ConstraintSystem<BellmanFr>>(
 }
 
 // Convert number to binary repr and negate
-pub fn to_bits_neg<CS: ConstraintSystem<BellmanFr>>(
+pub fn to_bits_and_neg<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: AllocatedNum<BellmanFr>,
     num_bits: usize,
@@ -257,17 +257,51 @@ pub fn sum_bits<CS: ConstraintSystem<BellmanFr>>(
     Ok(sum)
 }
 
-// ~200 constraints
-pub fn lte<CS: ConstraintSystem<BellmanFr>>(
+pub fn not<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
+    a: AllocatedBit,
+) -> Result<AllocatedBit, SynthesisError> {
+    let bit = AllocatedBit::alloc(&mut *cs, a.get_value().map(|b| !b))?;
+    cs.enforce(
+        || "",
+        |lc| lc + CS::one() - a.get_variable(),
+        |lc| lc + CS::one(),
+        |lc| lc + bit.get_variable(),
+    );
+    Ok(bit)
+}
+
+// ~200 constraints
+pub fn lt<CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    num_bits: usize,
     a: AllocatedNum<BellmanFr>,
     b: AllocatedNum<BellmanFr>,
 ) -> Result<AllocatedBit, SynthesisError> {
-    let a = to_bits(&mut *cs, a, 64)?;
-    let b_neg = to_bits_neg(&mut *cs, b, 64)?;
+    let a = to_bits(&mut *cs, a, num_bits)?;
+    let b_neg = to_bits_and_neg(&mut *cs, b, num_bits)?;
     let c = sum_bits(&mut *cs, a, b_neg)?;
-    let c_bits = to_bits(&mut *cs, c, 65)?;
-    Ok(c_bits[63].clone())
+    let c_bits = to_bits(&mut *cs, c, num_bits + 1)?;
+    Ok(c_bits[num_bits - 1].clone())
+}
+
+pub fn gt<CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    num_bits: usize,
+    a: AllocatedNum<BellmanFr>,
+    b: AllocatedNum<BellmanFr>,
+) -> Result<AllocatedBit, SynthesisError> {
+    lt(cs, num_bits, b, a)
+}
+
+pub fn lte<CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    num_bits: usize,
+    a: AllocatedNum<BellmanFr>,
+    b: AllocatedNum<BellmanFr>,
+) -> Result<AllocatedBit, SynthesisError> {
+    let gt = gt(cs, num_bits, a, b)?;
+    not(cs, gt)
 }
 
 pub fn assert_equal<CS: ConstraintSystem<BellmanFr>>(
@@ -313,7 +347,6 @@ mod test {
     use crate::Bls12;
     use bellman::gadgets::num::AllocatedNum;
     use bellman::{groth16, Circuit, ConstraintSystem, SynthesisError};
-    use ff::Field;
     use rand::rngs::OsRng;
 
     #[derive(Clone)]
@@ -393,6 +426,112 @@ mod test {
                         c.a.unwrap(),
                         c.b.unwrap(),
                         c.is_equal
+                            .map(|b| if b {
+                                BellmanFr::one()
+                            } else {
+                                BellmanFr::zero()
+                            })
+                            .unwrap()
+                    ]
+                )
+                .is_ok(),
+                expected
+            );
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestLteCircuit {
+        num_bits: usize,
+        a: Option<BellmanFr>,
+        b: Option<BellmanFr>,
+        is_lte: Option<bool>,
+    }
+
+    impl Circuit<BellmanFr> for TestLteCircuit {
+        fn synthesize<CS: ConstraintSystem<BellmanFr>>(
+            self,
+            cs: &mut CS,
+        ) -> Result<(), SynthesisError> {
+            let a =
+                AllocatedNum::alloc(&mut *cs, || self.a.ok_or(SynthesisError::AssignmentMissing))?;
+            a.inputize(&mut *cs)?;
+            let b =
+                AllocatedNum::alloc(&mut *cs, || self.b.ok_or(SynthesisError::AssignmentMissing))?;
+            b.inputize(&mut *cs)?;
+            let is_lte = AllocatedNum::alloc(&mut *cs, || {
+                self.is_lte
+                    .map(|b| {
+                        if b {
+                            BellmanFr::one()
+                        } else {
+                            BellmanFr::zero()
+                        }
+                    })
+                    .ok_or(SynthesisError::AssignmentMissing)
+            })?;
+            is_lte.inputize(&mut *cs)?;
+
+            let res = lte(&mut *cs, self.num_bits, a, b)?;
+            cs.enforce(
+                || "",
+                |lc| lc + res.get_variable(),
+                |lc| lc + CS::one(),
+                |lc| lc + is_lte.get_variable(),
+            );
+
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_lte_circuit() {
+        let params = {
+            let c = TestLteCircuit {
+                num_bits: 8,
+                a: None,
+                b: None,
+                is_lte: None,
+            };
+            groth16::generate_random_parameters::<Bls12, _, _>(c, &mut OsRng).unwrap()
+        };
+
+        let pvk = groth16::prepare_verifying_key(&params.vk);
+
+        for (a, b, eq, expected) in [
+            (122, 123, true, true),
+            (123, 123, true, true),
+            (124, 123, false, true),
+            (122, 123, false, false),
+            (123, 123, false, false),
+            (124, 123, true, false),
+            (252, 253, true, true),
+            (253, 253, true, true),
+            (254, 253, false, true),
+            (252, 253, false, false),
+            (253, 253, false, false),
+            (254, 253, true, false),
+            (254, 255, true, true),
+            (255, 256, false, false),
+            (255, 256, true, false),
+            (256, 255, true, false),
+            (256, 255, true, false),
+        ] {
+            let c = TestLteCircuit {
+                num_bits: 8,
+                a: Some(BellmanFr::from(a)),
+                b: Some(BellmanFr::from(b)),
+                is_lte: Some(eq),
+            };
+            let proof = groth16::create_random_proof(c.clone(), &params, &mut OsRng).unwrap();
+            assert_eq!(
+                groth16::verify_proof(
+                    &pvk,
+                    &proof,
+                    &[
+                        c.a.unwrap(),
+                        c.b.unwrap(),
+                        c.is_lte
                             .map(|b| if b {
                                 BellmanFr::one()
                             } else {
