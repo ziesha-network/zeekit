@@ -230,12 +230,16 @@ pub fn sum_bits<CS: ConstraintSystem<BellmanFr>>(
     let sum = AllocatedNum::alloc(&mut *cs, || {
         let mut result = BellmanFr::zero();
         let mut coeff = BellmanFr::one();
-        for (a_bit, b_bit) in a.iter().zip(b.iter()) {
-            if a_bit.get_value().ok_or(SynthesisError::AssignmentMissing)? {
-                result.add_assign(&coeff);
+        for i in 0..std::cmp::max(a.len(), b.len()) {
+            if let Some(a_bit) = a.get(i) {
+                if a_bit.get_value().ok_or(SynthesisError::AssignmentMissing)? {
+                    result.add_assign(&coeff);
+                }
             }
-            if b_bit.get_value().ok_or(SynthesisError::AssignmentMissing)? {
-                result.add_assign(&coeff);
+            if let Some(b_bit) = b.get(i) {
+                if b_bit.get_value().ok_or(SynthesisError::AssignmentMissing)? {
+                    result.add_assign(&coeff);
+                }
             }
             coeff = coeff.double();
         }
@@ -243,9 +247,13 @@ pub fn sum_bits<CS: ConstraintSystem<BellmanFr>>(
     })?;
     let mut coeff = BellmanFr::one();
     let mut all = LinearCombination::<BellmanFr>::zero();
-    for (a_bit, b_bit) in a.iter().zip(b.iter()) {
-        all = all + (coeff, a_bit.get_variable());
-        all = all + (coeff, b_bit.get_variable());
+    for i in 0..std::cmp::max(a.len(), b.len()) {
+        if let Some(a_bit) = a.get(i) {
+            all = all + (coeff, a_bit.get_variable());
+        }
+        if let Some(b_bit) = b.get(i) {
+            all = all + (coeff, b_bit.get_variable());
+        }
         coeff = coeff.double();
     }
     cs.enforce(
