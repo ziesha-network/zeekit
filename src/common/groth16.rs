@@ -118,6 +118,15 @@ impl UnsignedInteger {
         let gt = self.gt(cs, other)?;
         not(cs, gt)
     }
+
+    pub fn gte<CS: ConstraintSystem<BellmanFr>>(
+        &self,
+        cs: &mut CS,
+        other: &UnsignedInteger,
+    ) -> Result<AllocatedBit, SynthesisError> {
+        let lt = self.lt(cs, other)?;
+        not(cs, lt)
+    }
 }
 
 pub fn mux<CS: ConstraintSystem<BellmanFr>>(
