@@ -2,12 +2,12 @@ use super::*;
 
 pub struct UnsignedInteger {
     bits: Vec<AllocatedBit>,
-    num: AllocatedNum<BellmanFr>,
+    num: WrappedLc,
 }
 
 impl UnsignedInteger {
-    pub fn get_variable(&self) -> Variable {
-        self.num.get_variable()
+    pub fn get_wrapped_lc(&self) -> &WrappedLc {
+        &self.num
     }
     pub fn get_value(&self) -> Option<BellmanFr> {
         self.num.get_value()
@@ -20,7 +20,7 @@ impl UnsignedInteger {
     }
     pub fn constrain<CS: ConstraintSystem<BellmanFr>>(
         cs: &mut CS,
-        num: AllocatedNum<BellmanFr>,
+        num: WrappedLc,
         num_bits: usize,
     ) -> Result<Self, SynthesisError> {
         let mut bits = Vec::new();
@@ -39,7 +39,7 @@ impl UnsignedInteger {
             || "check",
             |lc| lc + &all,
             |lc| lc + CS::one(),
-            |lc| lc + num.get_variable(),
+            |lc| lc + num.get_lc(),
         );
 
         Ok(Self { num, bits })
@@ -56,19 +56,8 @@ impl UnsignedInteger {
 
         // Imagine a and b are two sigend (num_bits + 1) bits numbers
         let two_bits = BellmanFr::from(2).pow_vartime(&[num_bits as u64 + 1, 0, 0, 0]);
-        let sub = AllocatedNum::alloc(&mut *cs, || {
-            Ok(self
-                .get_value()
-                .zip(other.get_value())
-                .map(|(a, b)| a - b + two_bits)
-                .ok_or(SynthesisError::AssignmentMissing)?)
-        })?;
-        cs.enforce(
-            || "",
-            |lc| lc + self.get_variable() - other.get_variable() + (two_bits, CS::one()),
-            |lc| lc + CS::one(),
-            |lc| lc + sub.get_variable(),
-        );
+        let mut sub = self.num.clone() - other.num.clone();
+        sub.add_constant::<CS>(two_bits);
 
         let sub_bits = UnsignedInteger::constrain(&mut *cs, sub, num_bits + 2)?;
         Ok(sub_bits.bits()[num_bits].clone())

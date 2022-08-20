@@ -1,102 +1,54 @@
+mod mux;
 mod uint;
+mod wrapped_lc;
+pub use mux::*;
 pub use uint::*;
+pub use wrapped_lc::*;
 
 use crate::BellmanFr;
 
 use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
-use bellman::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
+use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::{Field, PrimeFieldBits};
-
-#[derive(Clone)]
-pub struct WrappedLc(pub LinearCombination<BellmanFr>, pub Option<BellmanFr>);
-impl WrappedLc {
-    pub fn get_lc(&self) -> &LinearCombination<BellmanFr> {
-        &self.0
-    }
-    pub fn get_value(&self) -> Option<BellmanFr> {
-        self.1
-    }
-    pub fn add_constant<CS: ConstraintSystem<BellmanFr>>(&mut self, num: BellmanFr) {
-        self.0 = self.0.clone() + (num, CS::one());
-        self.1 = self.1.map(|v| v + num);
-    }
-    pub fn add_num(&mut self, num: &AllocatedNum<BellmanFr>) {
-        self.0 = self.0.clone() + num.get_variable();
-        self.1 = if let Some(v) = self.1 {
-            num.get_value().map(|n| n + v)
-        } else {
-            None
-        };
-    }
-    pub fn alloc_num(a: AllocatedNum<BellmanFr>) -> WrappedLc {
-        WrappedLc(
-            LinearCombination::<BellmanFr>::zero() + a.get_variable(),
-            a.get_value(),
-        )
-    }
-    pub fn constant<CS: ConstraintSystem<BellmanFr>>(v: BellmanFr) -> WrappedLc {
-        WrappedLc(
-            LinearCombination::<BellmanFr>::zero() + (v, CS::one()),
-            Some(v),
-        )
-    }
-    pub fn zero() -> WrappedLc {
-        WrappedLc(
-            LinearCombination::<BellmanFr>::zero(),
-            Some(BellmanFr::zero()),
-        )
-    }
-}
-
-pub fn mux<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    select: &Boolean,
-    a: &WrappedLc,
-    b: &WrappedLc,
-) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
-    Ok(match select {
-        Boolean::Is(s) => {
-            let ret = AllocatedNum::alloc(&mut *cs, || {
-                s.get_value()
-                    .and_then(|s| if s { b.get_value() } else { a.get_value() })
-                    .ok_or(SynthesisError::AssignmentMissing)
-            })?;
-            cs.enforce(
-                || "(a - b) * s == a - ret",
-                |lc| lc + &a.0 - &b.0,
-                |lc| lc + s.get_variable(),
-                |lc| lc + &a.0 - ret.get_variable(),
-            );
-            ret
-        }
-        Boolean::Not(not_s) => {
-            let ret = AllocatedNum::alloc(&mut *cs, || {
-                not_s
-                    .get_value()
-                    .and_then(|not_s| if not_s { a.get_value() } else { b.get_value() })
-                    .ok_or(SynthesisError::AssignmentMissing)
-            })?;
-            cs.enforce(
-                || "(b - a) * not_s == b - ret",
-                |lc| lc + &b.0 - &a.0,
-                |lc| lc + not_s.get_variable(),
-                |lc| lc + &b.0 - ret.get_variable(),
-            );
-            ret
-        }
-        Boolean::Constant(_) => {
-            unimplemented!();
-        }
-    })
-}
+use std::ops::{Add, Sub};
 
 // Check if a number is zero, 2 constraints
 pub fn is_zero<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    a: AllocatedNum<BellmanFr>,
+    num: &WrappedLc,
 ) -> Result<AllocatedBit, SynthesisError> {
-    is_equal(cs, &WrappedLc::alloc_num(a), &WrappedLc::zero())
+    let is_zero = AllocatedBit::alloc(&mut *cs, num.get_value().map(|num| num.is_zero().into()))?;
+    let inv = AllocatedNum::alloc(&mut *cs, || {
+        num.get_value()
+            .map(|num| {
+                if num.is_zero().into() {
+                    BellmanFr::zero()
+                } else {
+                    num.invert().unwrap()
+                }
+            })
+            .ok_or(SynthesisError::AssignmentMissing)
+    })?;
+
+    // Alice claims "is_zero == 0", so "-num * inv == -1", so "inv" should be "1/num"
+    // Calculating inv is only possible if num != 0
+
+    cs.enforce(
+        || "-num * inv == is_zero - 1",
+        |lc| lc - num.get_lc(),
+        |lc| lc + inv.get_variable(),
+        |lc| lc + is_zero.get_variable() - CS::one(),
+    );
+
+    // Alice claims "is_zero == 1". Since "is_zero * num == 0", num can only be 0
+    cs.enforce(
+        || "is_zero * num == 0",
+        |lc| lc + is_zero.get_variable(),
+        |lc| lc + num.get_lc(),
+        |lc| lc,
+    );
+    Ok(is_zero)
 }
 
 // Check a == b, two constraints
@@ -105,35 +57,7 @@ pub fn is_equal<CS: ConstraintSystem<BellmanFr>>(
     a: &WrappedLc,
     b: &WrappedLc,
 ) -> Result<AllocatedBit, SynthesisError> {
-    let out = AllocatedBit::alloc(
-        &mut *cs,
-        a.get_value().zip(b.get_value()).map(|(a, b)| a == b),
-    )?;
-    let inv = AllocatedNum::alloc(&mut *cs, || {
-        a.get_value()
-            .zip(b.get_value())
-            .map(|(a, b)| {
-                if (a - b).is_zero().into() {
-                    BellmanFr::zero()
-                } else {
-                    (a - b).invert().unwrap()
-                }
-            })
-            .ok_or(SynthesisError::AssignmentMissing)
-    })?;
-    cs.enforce(
-        || "calc out",
-        |lc| lc - a.get_lc() + b.get_lc(),
-        |lc| lc + inv.get_variable(),
-        |lc| lc + out.get_variable() - CS::one(),
-    );
-    cs.enforce(
-        || "calc out",
-        |lc| lc + out.get_variable(),
-        |lc| lc + a.get_lc() - b.get_lc(),
-        |lc| lc,
-    );
-    Ok(out)
+    is_zero(cs, &(a.clone() - b.clone()))
 }
 
 pub fn not<CS: ConstraintSystem<BellmanFr>>(
@@ -188,219 +112,4 @@ pub fn assert_equal<CS: ConstraintSystem<BellmanFr>>(
 }
 
 #[cfg(test)]
-mod test {
-    use super::*;
-    use crate::Bls12;
-    use bellman::gadgets::num::AllocatedNum;
-    use bellman::{groth16, Circuit, ConstraintSystem, SynthesisError};
-    use rand::rngs::OsRng;
-
-    #[derive(Clone)]
-    struct TestIsEqualCircuit {
-        a: Option<BellmanFr>,
-        b: Option<BellmanFr>,
-        is_equal: Option<bool>,
-    }
-
-    impl Circuit<BellmanFr> for TestIsEqualCircuit {
-        fn synthesize<CS: ConstraintSystem<BellmanFr>>(
-            self,
-            cs: &mut CS,
-        ) -> Result<(), SynthesisError> {
-            let a =
-                AllocatedNum::alloc(&mut *cs, || self.a.ok_or(SynthesisError::AssignmentMissing))?;
-            a.inputize(&mut *cs)?;
-            let b =
-                AllocatedNum::alloc(&mut *cs, || self.b.ok_or(SynthesisError::AssignmentMissing))?;
-            b.inputize(&mut *cs)?;
-            let eq = AllocatedNum::alloc(&mut *cs, || {
-                self.is_equal
-                    .map(|b| {
-                        if b {
-                            BellmanFr::one()
-                        } else {
-                            BellmanFr::zero()
-                        }
-                    })
-                    .ok_or(SynthesisError::AssignmentMissing)
-            })?;
-            eq.inputize(&mut *cs)?;
-
-            let res = is_equal(&mut *cs, &WrappedLc::alloc_num(a), &WrappedLc::alloc_num(b))?;
-            println!("{:?} {:?}", res.get_value(), eq.get_value());
-            cs.enforce(
-                || "",
-                |lc| lc + res.get_variable(),
-                |lc| lc + CS::one(),
-                |lc| lc + eq.get_variable(),
-            );
-
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn test_is_equal_circuit() {
-        let params = {
-            let c = TestIsEqualCircuit {
-                a: None,
-                b: None,
-                is_equal: None,
-            };
-            groth16::generate_random_parameters::<Bls12, _, _>(c, &mut OsRng).unwrap()
-        };
-
-        let pvk = groth16::prepare_verifying_key(&params.vk);
-
-        for (a, b, eq, expected) in [
-            (123, 123, false, false),
-            (123, 123, true, true),
-            (123, 234, false, true),
-            (123, 234, true, false),
-        ] {
-            let c = TestIsEqualCircuit {
-                a: Some(BellmanFr::from(a)),
-                b: Some(BellmanFr::from(b)),
-                is_equal: Some(eq),
-            };
-            let proof = groth16::create_random_proof(c.clone(), &params, &mut OsRng).unwrap();
-            assert_eq!(
-                groth16::verify_proof(
-                    &pvk,
-                    &proof,
-                    &[
-                        c.a.unwrap(),
-                        c.b.unwrap(),
-                        c.is_equal
-                            .map(|b| if b {
-                                BellmanFr::one()
-                            } else {
-                                BellmanFr::zero()
-                            })
-                            .unwrap()
-                    ]
-                )
-                .is_ok(),
-                expected
-            );
-        }
-    }
-
-    #[derive(Clone)]
-    struct TestLteCircuit {
-        num_bits: usize,
-        a: Option<BellmanFr>,
-        b: Option<BellmanFr>,
-        is_lte: Option<bool>,
-    }
-
-    impl Circuit<BellmanFr> for TestLteCircuit {
-        fn synthesize<CS: ConstraintSystem<BellmanFr>>(
-            self,
-            cs: &mut CS,
-        ) -> Result<(), SynthesisError> {
-            let a =
-                AllocatedNum::alloc(&mut *cs, || self.a.ok_or(SynthesisError::AssignmentMissing))?;
-            a.inputize(&mut *cs)?;
-            let a_64 = UnsignedInteger::constrain(&mut *cs, a, self.num_bits)?;
-            let b =
-                AllocatedNum::alloc(&mut *cs, || self.b.ok_or(SynthesisError::AssignmentMissing))?;
-            b.inputize(&mut *cs)?;
-            let b_64 = UnsignedInteger::constrain(&mut *cs, b, self.num_bits)?;
-            let is_lte = AllocatedNum::alloc(&mut *cs, || {
-                self.is_lte
-                    .map(|b| {
-                        if b {
-                            BellmanFr::one()
-                        } else {
-                            BellmanFr::zero()
-                        }
-                    })
-                    .ok_or(SynthesisError::AssignmentMissing)
-            })?;
-            is_lte.inputize(&mut *cs)?;
-
-            let res = a_64.lte(&mut *cs, &b_64)?;
-            cs.enforce(
-                || "",
-                |lc| lc + res.get_variable(),
-                |lc| lc + CS::one(),
-                |lc| lc + is_lte.get_variable(),
-            );
-
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn test_lte_circuit() {
-        let params = {
-            let c = TestLteCircuit {
-                num_bits: 8,
-                a: None,
-                b: None,
-                is_lte: None,
-            };
-            groth16::generate_random_parameters::<Bls12, _, _>(c, &mut OsRng).unwrap()
-        };
-
-        let pvk = groth16::prepare_verifying_key(&params.vk);
-
-        for (a, b, eq, expected) in [
-            (0, 0, true, true),
-            (0, 0, false, false),
-            (0, 123, true, true),
-            (0, 123, false, false),
-            (123, 0, true, false),
-            (123, 0, false, true),
-            (122, 123, true, true),
-            (123, 123, true, true),
-            (124, 123, false, true),
-            (122, 123, false, false),
-            (123, 123, false, false),
-            (124, 123, true, false),
-            (252, 253, true, true),
-            (253, 253, true, true),
-            (254, 253, false, true),
-            (252, 253, false, false),
-            (253, 253, false, false),
-            (254, 253, true, false),
-            (254, 255, true, true),
-            (255, 256, false, false),
-            (255, 256, true, false),
-            (256, 255, false, false),
-            (256, 255, true, false),
-            (255, 257, false, false),
-            (255, 257, true, false),
-            (257, 255, false, false),
-            (257, 255, true, false),
-        ] {
-            let c = TestLteCircuit {
-                num_bits: 8,
-                a: Some(BellmanFr::from(a)),
-                b: Some(BellmanFr::from(b)),
-                is_lte: Some(eq),
-            };
-            let proof = groth16::create_random_proof(c.clone(), &params, &mut OsRng).unwrap();
-            assert_eq!(
-                groth16::verify_proof(
-                    &pvk,
-                    &proof,
-                    &[
-                        c.a.unwrap(),
-                        c.b.unwrap(),
-                        c.is_lte
-                            .map(|b| if b {
-                                BellmanFr::one()
-                            } else {
-                                BellmanFr::zero()
-                            })
-                            .unwrap()
-                    ]
-                )
-                .is_ok(),
-                expected
-            );
-        }
-    }
-}
+mod test;
