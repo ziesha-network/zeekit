@@ -2,9 +2,8 @@ use crate::BellmanFr;
 
 use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
-use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
+use bellman::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 use ff::{Field, PrimeFieldBits};
-use std::ops::AddAssign;
 
 #[derive(Clone)]
 pub struct WrappedLc(pub LinearCombination<BellmanFr>, pub Option<BellmanFr>);
@@ -44,6 +43,80 @@ impl WrappedLc {
             LinearCombination::<BellmanFr>::zero(),
             Some(BellmanFr::zero()),
         )
+    }
+}
+
+pub struct UnsignedInteger {
+    bits: Vec<AllocatedBit>,
+    num: AllocatedNum<BellmanFr>,
+}
+
+impl UnsignedInteger {
+    pub fn get_variable(&self) -> Variable {
+        self.num.get_variable()
+    }
+    pub fn get_value(&self) -> Option<BellmanFr> {
+        self.num.get_value()
+    }
+    pub fn bits(&self) -> &Vec<AllocatedBit> {
+        &self.bits
+    }
+    pub fn num_bits(&self) -> usize {
+        self.bits.len()
+    }
+    pub fn constrain<CS: ConstraintSystem<BellmanFr>>(
+        cs: &mut CS,
+        num: AllocatedNum<BellmanFr>,
+        num_bits: usize,
+    ) -> Result<Self, SynthesisError> {
+        let bits = to_bits(cs, num.clone(), num_bits)?;
+        Ok(Self { num, bits })
+    }
+
+    // ~198 constraints
+    pub fn lt<CS: ConstraintSystem<BellmanFr>>(
+        &self,
+        cs: &mut CS,
+        other: &UnsignedInteger,
+    ) -> Result<AllocatedBit, SynthesisError> {
+        assert_eq!(self.num_bits(), other.num_bits());
+        let num_bits = self.num_bits();
+
+        // Imagine a and b are two sigend (num_bits + 1) bits numbers
+        let two_bits = BellmanFr::from(2).pow_vartime(&[num_bits as u64 + 1, 0, 0, 0]);
+        let sub = AllocatedNum::alloc(&mut *cs, || {
+            Ok(self
+                .get_value()
+                .zip(other.get_value())
+                .map(|(a, b)| a - b + two_bits)
+                .ok_or(SynthesisError::AssignmentMissing)?)
+        })?;
+        cs.enforce(
+            || "",
+            |lc| lc + self.get_variable() - other.get_variable() + (two_bits, CS::one()),
+            |lc| lc + CS::one(),
+            |lc| lc + sub.get_variable(),
+        );
+
+        let sub_bits = to_bits(&mut *cs, sub, num_bits + 2)?;
+        Ok(sub_bits[num_bits].clone())
+    }
+
+    pub fn gt<CS: ConstraintSystem<BellmanFr>>(
+        &self,
+        cs: &mut CS,
+        other: &UnsignedInteger,
+    ) -> Result<AllocatedBit, SynthesisError> {
+        other.lt(cs, self)
+    }
+
+    pub fn lte<CS: ConstraintSystem<BellmanFr>>(
+        &self,
+        cs: &mut CS,
+        other: &UnsignedInteger,
+    ) -> Result<AllocatedBit, SynthesisError> {
+        let gt = self.gt(cs, other)?;
+        not(cs, gt)
     }
 }
 
@@ -134,36 +207,6 @@ pub fn is_equal<CS: ConstraintSystem<BellmanFr>>(
     Ok(out)
 }
 
-pub fn from_bits<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    bits: Vec<AllocatedBit>,
-) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
-    let sum = AllocatedNum::alloc(&mut *cs, || {
-        let mut result = BellmanFr::zero();
-        let mut coeff = BellmanFr::one();
-        for bit in bits.iter() {
-            if bit.get_value().ok_or(SynthesisError::AssignmentMissing)? {
-                result.add_assign(&coeff);
-            }
-            coeff = coeff.double();
-        }
-        Ok(result)
-    })?;
-    let mut coeff = BellmanFr::one();
-    let mut all = LinearCombination::<BellmanFr>::zero();
-    for bit in bits.iter() {
-        all = all + (coeff, bit.get_variable());
-        coeff = coeff.double();
-    }
-    cs.enforce(
-        || "sum check",
-        |lc| lc + &all,
-        |lc| lc + CS::one(),
-        |lc| lc + sum.get_variable(),
-    );
-    Ok(sum)
-}
-
 // Convert number to binary repr, bits + 1 constraints
 pub fn to_bits<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
@@ -203,54 +246,6 @@ pub fn not<CS: ConstraintSystem<BellmanFr>>(
         |lc| lc + bit.get_variable(),
     );
     Ok(bit)
-}
-
-// ~198 constraints
-pub fn lt<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    num_bits: usize,
-    a: AllocatedNum<BellmanFr>,
-    b: AllocatedNum<BellmanFr>,
-) -> Result<AllocatedBit, SynthesisError> {
-    to_bits(&mut *cs, a.clone(), num_bits)?; // Make sure a has only num_bits bits
-    to_bits(&mut *cs, b.clone(), num_bits)?; // Make sure b has only num_bits bits
-
-    // Imagine a and b are two sigend (num_bits + 1) bits numbers
-    let two_bits = BellmanFr::from(2).pow_vartime(&[num_bits as u64 + 1, 0, 0, 0]);
-    let sub = AllocatedNum::alloc(&mut *cs, || {
-        Ok(a.get_value()
-            .zip(b.get_value())
-            .map(|(a, b)| a - b + two_bits)
-            .ok_or(SynthesisError::AssignmentMissing)?)
-    })?;
-    cs.enforce(
-        || "",
-        |lc| lc + a.get_variable() - b.get_variable() + (two_bits, CS::one()),
-        |lc| lc + CS::one(),
-        |lc| lc + sub.get_variable(),
-    );
-
-    let sub_bits = to_bits(&mut *cs, sub, num_bits + 2)?;
-    Ok(sub_bits[num_bits].clone())
-}
-
-pub fn gt<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    num_bits: usize,
-    a: AllocatedNum<BellmanFr>,
-    b: AllocatedNum<BellmanFr>,
-) -> Result<AllocatedBit, SynthesisError> {
-    lt(cs, num_bits, b, a)
-}
-
-pub fn lte<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    num_bits: usize,
-    a: AllocatedNum<BellmanFr>,
-    b: AllocatedNum<BellmanFr>,
-) -> Result<AllocatedBit, SynthesisError> {
-    let gt = gt(cs, num_bits, a, b)?;
-    not(cs, gt)
 }
 
 pub fn assert_equal<CS: ConstraintSystem<BellmanFr>>(
@@ -405,9 +400,11 @@ mod test {
             let a =
                 AllocatedNum::alloc(&mut *cs, || self.a.ok_or(SynthesisError::AssignmentMissing))?;
             a.inputize(&mut *cs)?;
+            let a_64 = UnsignedInteger::constrain(&mut *cs, a, self.num_bits)?;
             let b =
                 AllocatedNum::alloc(&mut *cs, || self.b.ok_or(SynthesisError::AssignmentMissing))?;
             b.inputize(&mut *cs)?;
+            let b_64 = UnsignedInteger::constrain(&mut *cs, b, self.num_bits)?;
             let is_lte = AllocatedNum::alloc(&mut *cs, || {
                 self.is_lte
                     .map(|b| {
@@ -421,7 +418,7 @@ mod test {
             })?;
             is_lte.inputize(&mut *cs)?;
 
-            let res = lte(&mut *cs, self.num_bits, a, b)?;
+            let res = a_64.lte(&mut *cs, &b_64)?;
             cs.enforce(
                 || "",
                 |lc| lc + res.get_variable(),
