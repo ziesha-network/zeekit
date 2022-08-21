@@ -1,12 +1,16 @@
 use super::*;
 
+#[derive(Clone)]
 pub struct UnsignedInteger {
     bits: Vec<AllocatedBit>,
     num: Number,
 }
 
 impl UnsignedInteger {
-    pub fn get_wrapped_lc(&self) -> &Number {
+    pub fn get_lc(&self) -> &LinearCombination<BellmanFr> {
+        self.num.get_lc()
+    }
+    pub fn get_number(&self) -> &Number {
         &self.num
     }
     pub fn get_value(&self) -> Option<BellmanFr> {
@@ -17,6 +21,20 @@ impl UnsignedInteger {
     }
     pub fn num_bits(&self) -> usize {
         self.bits.len()
+    }
+    pub fn alloc_32<CS: ConstraintSystem<BellmanFr>>(
+        cs: &mut CS,
+        val: u32,
+    ) -> Result<Self, SynthesisError> {
+        let alloc = AllocatedNum::alloc(&mut *cs, || Ok(BellmanFr::from(val as u64)))?;
+        Self::constrain(cs, alloc.into(), 32)
+    }
+    pub fn alloc_64<CS: ConstraintSystem<BellmanFr>>(
+        cs: &mut CS,
+        val: u64,
+    ) -> Result<Self, SynthesisError> {
+        let alloc = AllocatedNum::alloc(&mut *cs, || Ok(BellmanFr::from(val)))?;
+        Self::constrain(cs, alloc.into(), 64)
     }
     pub fn constrain<CS: ConstraintSystem<BellmanFr>>(
         cs: &mut CS,

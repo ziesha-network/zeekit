@@ -1,12 +1,12 @@
+use crate::common::groth16::Number;
 use crate::poseidon::groth16::{poseidon, poseidon4};
 use crate::BellmanFr;
 use bazuka::zk::ZkStateModel;
-use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, SynthesisError};
 
 #[derive(Clone)]
 pub enum AllocatedState {
-    Value(AllocatedNum<BellmanFr>),
+    Value(Number),
     Children(Vec<AllocatedState>),
 }
 
@@ -14,7 +14,7 @@ pub fn reveal<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     state_model: ZkStateModel,
     state: AllocatedState,
-) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
+) -> Result<Number, SynthesisError> {
     match state_model {
         ZkStateModel::Scalar => {
             if let AllocatedState::Value(v) = state {
@@ -27,13 +27,12 @@ pub fn reveal<CS: ConstraintSystem<BellmanFr>>(
             let mut vals = Vec::new();
             if let AllocatedState::Children(children) = state {
                 for (field_type, field_value) in field_types.iter().zip(children.into_iter()) {
-                    vals.push(reveal(&mut *cs, field_type.clone(), field_value)?.into());
+                    vals.push(reveal(&mut *cs, field_type.clone(), field_value)?);
                 }
             } else {
                 panic!("Invalid state!");
             }
-            let hash = poseidon(&mut *cs, &vals)?;
-            hash.alloc(&mut *cs)
+            poseidon(&mut *cs, &vals)
         }
         ZkStateModel::List {
             log4_size,
@@ -52,12 +51,12 @@ pub fn reveal<CS: ConstraintSystem<BellmanFr>>(
                 for chunk in leaves.chunks(4) {
                     let hash = poseidon4(
                         &mut *cs,
-                        chunk[0].clone().into(),
-                        chunk[1].clone().into(),
-                        chunk[2].clone().into(),
-                        chunk[3].clone().into(),
+                        chunk[0].clone(),
+                        chunk[1].clone(),
+                        chunk[2].clone(),
+                        chunk[3].clone(),
                     )?;
-                    new_leaves.push(hash.alloc(&mut *cs)?);
+                    new_leaves.push(hash);
                 }
                 leaves = new_leaves;
             }
@@ -72,6 +71,7 @@ mod test {
     use crate::Bls12;
     use bazuka::core::ZkHasher;
     use bazuka::zk::{ZkDataLocator, ZkDataPairs, ZkScalar, ZkStateBuilder};
+    use bellman::gadgets::num::AllocatedNum;
     use bellman::{groth16, Circuit, ConstraintSystem, SynthesisError};
     use rand::rngs::OsRng;
 
@@ -101,7 +101,7 @@ mod test {
                         Err(SynthesisError::AssignmentMissing)
                     }
                 })?;
-                Ok(AllocatedState::Value(num))
+                Ok(AllocatedState::Value(num.into()))
             }
             ZkStateModel::Struct { field_types } => {
                 let mut children = Vec::new();
@@ -154,7 +154,7 @@ mod test {
 
             cs.enforce(
                 || "",
-                |lc| lc + root.get_variable(),
+                |lc| lc + root.get_lc(),
                 |lc| lc + CS::one(),
                 |lc| lc + out.get_variable(),
             );

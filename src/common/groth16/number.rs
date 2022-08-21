@@ -96,3 +96,22 @@ impl From<AllocatedNum<BellmanFr>> for Number {
         )
     }
 }
+
+impl From<AllocatedBit> for Number {
+    fn from(a: AllocatedBit) -> Self {
+        Self(
+            LinearCombination::<BellmanFr>::zero() + a.get_variable(),
+            a.get_value()
+                .map(|b| BellmanFr::from(if b { 1 } else { 0 })),
+        )
+    }
+}
+
+impl From<UnsignedInteger> for Number {
+    fn from(a: UnsignedInteger) -> Self {
+        Self(
+            LinearCombination::<BellmanFr>::zero() + a.get_lc(),
+            a.get_value(),
+        )
+    }
+}
