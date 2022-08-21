@@ -3,8 +3,8 @@ use super::*;
 pub fn mux<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     select: &Boolean,
-    a: &WrappedLc,
-    b: &WrappedLc,
+    a: &Number,
+    b: &Number,
 ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
     Ok(match select {
         Boolean::Is(s) => {

@@ -2,11 +2,11 @@ use super::*;
 
 pub struct UnsignedInteger {
     bits: Vec<AllocatedBit>,
-    num: WrappedLc,
+    num: Number,
 }
 
 impl UnsignedInteger {
-    pub fn get_wrapped_lc(&self) -> &WrappedLc {
+    pub fn get_wrapped_lc(&self) -> &Number {
         &self.num
     }
     pub fn get_value(&self) -> Option<BellmanFr> {
@@ -20,7 +20,7 @@ impl UnsignedInteger {
     }
     pub fn constrain<CS: ConstraintSystem<BellmanFr>>(
         cs: &mut CS,
-        num: WrappedLc,
+        num: Number,
         num_bits: usize,
     ) -> Result<Self, SynthesisError> {
         let mut bits = Vec::new();

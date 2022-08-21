@@ -33,7 +33,7 @@ impl Circuit<BellmanFr> for TestIsEqualCircuit {
         })?;
         eq.inputize(&mut *cs)?;
 
-        let res = is_equal(&mut *cs, &WrappedLc::alloc_num(a), &WrappedLc::alloc_num(b))?;
+        let res = is_equal(&mut *cs, &a.into(), &b.into())?;
         println!("{:?} {:?}", res.get_value(), eq.get_value());
         cs.enforce(
             || "",
@@ -108,10 +108,10 @@ impl Circuit<BellmanFr> for TestLteCircuit {
     ) -> Result<(), SynthesisError> {
         let a = AllocatedNum::alloc(&mut *cs, || self.a.ok_or(SynthesisError::AssignmentMissing))?;
         a.inputize(&mut *cs)?;
-        let a_64 = UnsignedInteger::constrain(&mut *cs, WrappedLc::alloc_num(a), self.num_bits)?;
+        let a_64 = UnsignedInteger::constrain(&mut *cs, a.into(), self.num_bits)?;
         let b = AllocatedNum::alloc(&mut *cs, || self.b.ok_or(SynthesisError::AssignmentMissing))?;
         b.inputize(&mut *cs)?;
-        let b_64 = UnsignedInteger::constrain(&mut *cs, WrappedLc::alloc_num(b), self.num_bits)?;
+        let b_64 = UnsignedInteger::constrain(&mut *cs, b.into(), self.num_bits)?;
         let is_lte = AllocatedNum::alloc(&mut *cs, || {
             self.is_lte
                 .map(|b| {

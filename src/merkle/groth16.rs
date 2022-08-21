@@ -1,4 +1,4 @@
-use crate::common::groth16::WrappedLc;
+use crate::common::groth16::Number;
 use crate::BellmanFr;
 use crate::{common, poseidon};
 
@@ -16,54 +16,24 @@ fn merge_hash_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     let or = Boolean::and(&mut *cs, &select.0.not(), &select.1.not())?.not();
 
     // v0 == s0_or_s1 ? p[0] : v
-    let v0 = common::groth16::mux(
-        &mut *cs,
-        &or,
-        &WrappedLc::alloc_num(v.clone()),
-        &WrappedLc::alloc_num(p[0].clone()),
-    )?;
+    let v0 = common::groth16::mux(&mut *cs, &or, &v.clone().into(), &p[0].clone().into())?;
 
     //v1p == s0 ? v : p[0]
-    let v1p = common::groth16::mux(
-        &mut *cs,
-        &select.0,
-        &WrappedLc::alloc_num(p[0].clone()),
-        &WrappedLc::alloc_num(v.clone()),
-    )?;
+    let v1p = common::groth16::mux(&mut *cs, &select.0, &p[0].clone().into(), &v.clone().into())?;
 
     //v1 == s1 ? p[1] : v1p
-    let v1 = common::groth16::mux(
-        &mut *cs,
-        &select.1,
-        &WrappedLc::alloc_num(v1p),
-        &WrappedLc::alloc_num(p[1].clone()),
-    )?;
+    let v1 = common::groth16::mux(&mut *cs, &select.1, &v1p.into(), &p[1].clone().into())?;
 
     //v2p == s0 ? p[2] : v
-    let v2p = common::groth16::mux(
-        &mut *cs,
-        &select.0,
-        &WrappedLc::alloc_num(v.clone()),
-        &WrappedLc::alloc_num(p[2].clone()),
-    )?;
+    let v2p = common::groth16::mux(&mut *cs, &select.0, &v.clone().into(), &p[2].clone().into())?;
 
     //v2 == s1 ? v2p : p[1]
-    let v2 = common::groth16::mux(
-        &mut *cs,
-        &select.1,
-        &WrappedLc::alloc_num(p[1].clone()),
-        &WrappedLc::alloc_num(v2p),
-    )?;
+    let v2 = common::groth16::mux(&mut *cs, &select.1, &p[1].clone().into(), &v2p.into())?;
 
     //v3 == s0_and_s1 ? v : p[2]
-    let v3 = common::groth16::mux(
-        &mut *cs,
-        &and,
-        &WrappedLc::alloc_num(p[2].clone()),
-        &WrappedLc::alloc_num(v),
-    )?;
+    let v3 = common::groth16::mux(&mut *cs, &and, &p[2].clone().into(), &v.into())?;
 
-    poseidon::groth16::poseidon4(cs, v0, v1, v2, v3)
+    poseidon::groth16::poseidon4(cs, v0.into(), v1.into(), v2.into(), v3.into())?.alloc(&mut *cs)
 }
 
 pub fn calc_root_poseidon4<CS: ConstraintSystem<BellmanFr>>(

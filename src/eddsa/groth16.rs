@@ -1,4 +1,4 @@
-use crate::common::groth16::WrappedLc;
+use crate::common::groth16::Number;
 use crate::BellmanFr;
 use crate::{common, poseidon};
 
@@ -126,34 +126,21 @@ pub fn mul_point<CS: ConstraintSystem<BellmanFr>>(
 ) -> Result<AllocatedPoint, SynthesisError> {
     let bits: Vec<Boolean> = b.to_bits_le_strict(&mut *cs)?.into_iter().rev().collect();
     let mut result = AllocatedPoint {
-        x: common::groth16::mux(
-            &mut *cs,
-            &bits[0],
-            &WrappedLc::zero(),
-            &WrappedLc::alloc_num(base.x.clone()),
-        )?,
+        x: common::groth16::mux(&mut *cs, &bits[0], &Number::zero(), &base.x.clone().into())?,
         y: common::groth16::mux(
             &mut *cs,
             &bits[0],
-            &WrappedLc::constant::<CS>(BellmanFr::one()),
-            &WrappedLc::alloc_num(base.y.clone()),
+            &Number::constant::<CS>(BellmanFr::one()),
+            &base.y.clone().into(),
         )?,
     };
     for bit in bits[1..].iter() {
         result = add_point(&mut *cs, result.clone(), result)?;
         let result_plus_base = add_point(&mut *cs, result.clone(), base.clone())?;
-        let result_x = common::groth16::mux(
-            &mut *cs,
-            &bit,
-            &WrappedLc::alloc_num(result.x),
-            &WrappedLc::alloc_num(result_plus_base.x),
-        )?;
-        let result_y = common::groth16::mux(
-            &mut *cs,
-            &bit,
-            &WrappedLc::alloc_num(result.y),
-            &WrappedLc::alloc_num(result_plus_base.y),
-        )?;
+        let result_x =
+            common::groth16::mux(&mut *cs, &bit, &result.x.into(), &result_plus_base.x.into())?;
+        let result_y =
+            common::groth16::mux(&mut *cs, &bit, &result.y.into(), &result_plus_base.y.into())?;
         result = AllocatedPoint {
             x: result_x,
             y: result_y,
@@ -172,31 +159,23 @@ pub fn mul_const_point<CS: ConstraintSystem<BellmanFr>>(
         x: common::groth16::mux(
             &mut *cs,
             &bits[0],
-            &WrappedLc::zero(),
-            &WrappedLc::constant::<CS>(base.0.into()),
+            &Number::zero(),
+            &Number::constant::<CS>(base.0.into()),
         )?,
         y: common::groth16::mux(
             &mut *cs,
             &bits[0],
-            &WrappedLc::constant::<CS>(BellmanFr::one()),
-            &WrappedLc::constant::<CS>(base.1.into()),
+            &Number::constant::<CS>(BellmanFr::one()),
+            &Number::constant::<CS>(base.1.into()),
         )?,
     };
     for bit in bits[1..].iter() {
         result = add_point(&mut *cs, result.clone(), result)?;
         let result_plus_base = add_const_point(&mut *cs, result.clone(), base.clone())?;
-        let result_x = common::groth16::mux(
-            &mut *cs,
-            &bit,
-            &WrappedLc::alloc_num(result.x),
-            &WrappedLc::alloc_num(result_plus_base.x),
-        )?;
-        let result_y = common::groth16::mux(
-            &mut *cs,
-            &bit,
-            &WrappedLc::alloc_num(result.y),
-            &WrappedLc::alloc_num(result_plus_base.y),
-        )?;
+        let result_x =
+            common::groth16::mux(&mut *cs, &bit, &result.x.into(), &result_plus_base.x.into())?;
+        let result_y =
+            common::groth16::mux(&mut *cs, &bit, &result.y.into(), &result_plus_base.y.into())?;
         result = AllocatedPoint {
             x: result_x,
             y: result_y,
@@ -228,13 +207,14 @@ pub fn verify_eddsa<CS: ConstraintSystem<BellmanFr>>(
     let h = poseidon::groth16::poseidon(
         &mut *cs,
         &[
-            sig_r.x.clone(),
-            sig_r.y.clone(),
-            pk.x.clone(),
-            pk.y.clone(),
-            msg,
+            sig_r.x.clone().into(),
+            sig_r.y.clone().into(),
+            pk.x.clone().into(),
+            pk.y.clone().into(),
+            msg.into(),
         ],
-    )?;
+    )?
+    .alloc(&mut *cs)?;
 
     let sb = mul_const_point(&mut *cs, BASE_COFACTOR.clone(), sig_s)?;
 

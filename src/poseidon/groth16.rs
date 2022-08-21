@@ -1,4 +1,4 @@
-use crate::common::groth16::WrappedLc;
+use crate::common::groth16::Number;
 use crate::BellmanFr;
 
 use bazuka::zk::poseidon4::{MDS_MATRIX, ROUNDSF, ROUNDSP, ROUND_CONSTANTS};
@@ -7,7 +7,7 @@ use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
 
 pub fn compress<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    a: WrappedLc,
+    a: Number,
 ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
     let a_new = AllocatedNum::alloc(&mut *cs, || a.1.ok_or(SynthesisError::AssignmentMissing))?;
     cs.enforce(
@@ -21,8 +21,8 @@ pub fn compress<CS: ConstraintSystem<BellmanFr>>(
 
 pub fn sbox<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    a: WrappedLc,
-) -> Result<WrappedLc, SynthesisError> {
+    a: Number,
+) -> Result<Number, SynthesisError> {
     let a2 = AllocatedNum::alloc(&mut *cs, || {
         a.1.map(|v| v.square())
             .ok_or(SynthesisError::AssignmentMissing)
@@ -46,16 +46,13 @@ pub fn sbox<CS: ConstraintSystem<BellmanFr>>(
         |lc| lc + &a.0,
         |lc| lc + a5.get_variable(),
     );
-    Ok(WrappedLc(
+    Ok(Number(
         LinearCombination::<BellmanFr>::zero() + a5.get_variable(),
         a5.get_value(),
     ))
 }
 
-pub fn add_constants<CS: ConstraintSystem<BellmanFr>>(
-    vals: &mut [WrappedLc; 5],
-    const_offset: usize,
-) {
+pub fn add_constants<CS: ConstraintSystem<BellmanFr>>(vals: &mut [Number; 5], const_offset: usize) {
     for i in 0..5 {
         vals[i].add_constant::<CS>(ROUND_CONSTANTS[const_offset + i].into());
     }
@@ -64,13 +61,13 @@ pub fn add_constants<CS: ConstraintSystem<BellmanFr>>(
 pub fn partial_round<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     const_offset: usize,
-    mut vals: [WrappedLc; 5],
-) -> Result<[WrappedLc; 5], SynthesisError> {
+    mut vals: [Number; 5],
+) -> Result<[Number; 5], SynthesisError> {
     add_constants::<CS>(&mut vals, const_offset);
 
     vals[0] = sbox(&mut *cs, vals[0].clone())?;
     for i in 1..5 {
-        vals[i] = WrappedLc::alloc_num(compress(&mut *cs, vals[i].clone())?);
+        vals[i] = vals[i].clone().alloc(&mut *cs)?.into();
     }
 
     product_mds(vals)
@@ -79,8 +76,8 @@ pub fn partial_round<CS: ConstraintSystem<BellmanFr>>(
 pub fn full_round<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     const_offset: usize,
-    mut vals: [WrappedLc; 5],
-) -> Result<[WrappedLc; 5], SynthesisError> {
+    mut vals: [Number; 5],
+) -> Result<[Number; 5], SynthesisError> {
     add_constants::<CS>(&mut vals, const_offset);
 
     for i in 0..5 {
@@ -90,13 +87,13 @@ pub fn full_round<CS: ConstraintSystem<BellmanFr>>(
     product_mds(vals)
 }
 
-pub fn product_mds(vals: [WrappedLc; 5]) -> Result<[WrappedLc; 5], SynthesisError> {
+pub fn product_mds(vals: [Number; 5]) -> Result<[Number; 5], SynthesisError> {
     let mut result = [
-        WrappedLc::zero(),
-        WrappedLc::zero(),
-        WrappedLc::zero(),
-        WrappedLc::zero(),
-        WrappedLc::zero(),
+        Number::zero(),
+        Number::zero(),
+        Number::zero(),
+        Number::zero(),
+        Number::zero(),
     ];
     for j in 0..5 {
         for k in 0..5 {
@@ -110,33 +107,12 @@ pub fn product_mds(vals: [WrappedLc; 5]) -> Result<[WrappedLc; 5], SynthesisErro
 
 pub fn poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    a: AllocatedNum<BellmanFr>,
-    b: AllocatedNum<BellmanFr>,
-    c: AllocatedNum<BellmanFr>,
-    d: AllocatedNum<BellmanFr>,
-) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
-    let mut elems = [
-        WrappedLc(
-            LinearCombination::<BellmanFr>::zero(),
-            Some(BellmanFr::zero()),
-        ),
-        WrappedLc(
-            LinearCombination::<BellmanFr>::zero() + a.get_variable(),
-            a.get_value(),
-        ),
-        WrappedLc(
-            LinearCombination::<BellmanFr>::zero() + b.get_variable(),
-            b.get_value(),
-        ),
-        WrappedLc(
-            LinearCombination::<BellmanFr>::zero() + c.get_variable(),
-            c.get_value(),
-        ),
-        WrappedLc(
-            LinearCombination::<BellmanFr>::zero() + d.get_variable(),
-            d.get_value(),
-        ),
-    ];
+    a: Number,
+    b: Number,
+    c: Number,
+    d: Number,
+) -> Result<Number, SynthesisError> {
+    let mut elems = [Number::zero(), a, b, c, d];
     let mut const_offset = 0;
 
     for _ in 0..ROUNDSF / 2 {
@@ -154,22 +130,14 @@ pub fn poseidon4<CS: ConstraintSystem<BellmanFr>>(
         const_offset += 5;
     }
 
-    compress(cs, elems[1].clone())
+    Ok(elems[1].clone())
 }
 
 pub fn poseidon<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    vals: &[AllocatedNum<BellmanFr>],
-) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
+    vals: &[Number],
+) -> Result<Number, SynthesisError> {
     let mut first = vals[0].clone();
-
-    let zero = AllocatedNum::<BellmanFr>::alloc(&mut *cs, || Ok(BellmanFr::zero()))?;
-    cs.enforce(
-        || "",
-        |lc| lc + zero.get_variable(),
-        |lc| lc + CS::one(),
-        |lc| lc,
-    );
 
     for chunk in vals[1..].chunks(3) {
         first = match chunk.len() {
@@ -177,15 +145,15 @@ pub fn poseidon<CS: ConstraintSystem<BellmanFr>>(
                 &mut *cs,
                 first.clone(),
                 chunk[0].clone(),
-                zero.clone(),
-                zero.clone(),
+                Number::zero(),
+                Number::zero(),
             )?,
             2 => poseidon4(
                 &mut *cs,
                 first.clone(),
                 chunk[0].clone(),
                 chunk[1].clone(),
-                zero.clone(),
+                Number::zero(),
             )?,
             3 => poseidon4(
                 &mut *cs,
@@ -236,12 +204,12 @@ mod test {
             let d =
                 AllocatedNum::alloc(&mut *cs, || self.d.ok_or(SynthesisError::AssignmentMissing))?;
 
-            let res = poseidon4(&mut *cs, a, b, c, d)?;
+            let res = poseidon4(&mut *cs, a.into(), b.into(), c.into(), d.into())?;
             cs.enforce(
                 || "",
                 |lc| lc + out.get_variable(),
                 |lc| lc + CS::one(),
-                |lc| lc + res.get_variable(),
+                |lc| lc + res.get_lc(),
             );
             Ok(())
         }

@@ -1,9 +1,9 @@
 mod mux;
+mod number;
 mod uint;
-mod wrapped_lc;
 pub use mux::*;
+pub use number::*;
 pub use uint::*;
-pub use wrapped_lc::*;
 
 use crate::BellmanFr;
 
@@ -16,7 +16,7 @@ use std::ops::{Add, Sub};
 // Check if a number is zero, 2 constraints
 pub fn is_zero<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    num: &WrappedLc,
+    num: &Number,
 ) -> Result<AllocatedBit, SynthesisError> {
     let is_zero = AllocatedBit::alloc(&mut *cs, num.get_value().map(|num| num.is_zero().into()))?;
     let inv = AllocatedNum::alloc(&mut *cs, || {
@@ -54,8 +54,8 @@ pub fn is_zero<CS: ConstraintSystem<BellmanFr>>(
 // Check a == b, two constraints
 pub fn is_equal<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    a: &WrappedLc,
-    b: &WrappedLc,
+    a: &Number,
+    b: &Number,
 ) -> Result<AllocatedBit, SynthesisError> {
     is_zero(cs, &(a.clone() - b.clone()))
 }
