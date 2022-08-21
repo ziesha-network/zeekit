@@ -8,10 +8,12 @@ use bellman::{ConstraintSystem, SynthesisError};
 
 fn merge_hash_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    select: (Boolean, Boolean),
+    select: (AllocatedBit, AllocatedBit),
     v: AllocatedNum<BellmanFr>,
     p: [AllocatedNum<BellmanFr>; 3],
 ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
+    let select = (Boolean::Is(select.0), Boolean::Is(select.1));
+
     let and = Boolean::and(&mut *cs, &select.0, &select.1)?;
     let or = Boolean::and(&mut *cs, &select.0.not(), &select.1.not())?.not();
 
@@ -38,13 +40,13 @@ fn merge_hash_poseidon4<CS: ConstraintSystem<BellmanFr>>(
 
 pub fn calc_root_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    index: AllocatedNum<BellmanFr>,
+    index: Number,
     val: AllocatedNum<BellmanFr>,
     proof: Vec<[AllocatedNum<BellmanFr>; 3]>,
 ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
-    let selectors = index.to_bits_le(&mut *cs)?;
+    let selectors = common::groth16::UnsignedInteger::constrain(&mut *cs, index, proof.len() * 2)?;
     let mut curr = val.clone();
-    for (p, dir) in proof.into_iter().zip(selectors.chunks(2)) {
+    for (p, dir) in proof.into_iter().zip(selectors.bits().chunks(2)) {
         curr = merge_hash_poseidon4(&mut *cs, (dir[0].clone(), dir[1].clone()), curr, p)?;
     }
     Ok(curr)
@@ -53,7 +55,7 @@ pub fn calc_root_poseidon4<CS: ConstraintSystem<BellmanFr>>(
 pub fn check_proof_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     enabled: AllocatedBit,
-    index: AllocatedNum<BellmanFr>,
+    index: Number,
     val: AllocatedNum<BellmanFr>,
     proof: Vec<[AllocatedNum<BellmanFr>; 3]>,
     root: AllocatedNum<BellmanFr>,
@@ -117,7 +119,7 @@ mod test {
 
             let enabled = AllocatedBit::alloc(&mut *cs, Some(true))?;
 
-            check_proof_poseidon4(&mut *cs, enabled, index, val, proof, root)?;
+            check_proof_poseidon4(&mut *cs, enabled, index.into(), val, proof, root)?;
 
             Ok(())
         }
