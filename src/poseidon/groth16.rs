@@ -5,20 +5,6 @@ use bazuka::zk::poseidon4::{MDS_MATRIX, ROUNDSF, ROUNDSP, ROUND_CONSTANTS};
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
 
-pub fn compress<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    a: Number,
-) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
-    let a_new = AllocatedNum::alloc(&mut *cs, || a.1.ok_or(SynthesisError::AssignmentMissing))?;
-    cs.enforce(
-        || "",
-        |lc| lc + &a.0,
-        |lc| lc + CS::one(),
-        |lc| lc + a_new.get_variable(),
-    );
-    Ok(a_new)
-}
-
 pub fn sbox<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: Number,
