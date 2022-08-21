@@ -9,41 +9,41 @@ use bellman::{ConstraintSystem, SynthesisError};
 fn merge_hash_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     select: (AllocatedBit, AllocatedBit),
-    v: AllocatedNum<BellmanFr>,
+    v: Number,
     p: [AllocatedNum<BellmanFr>; 3],
-) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
+) -> Result<Number, SynthesisError> {
     let select = (Boolean::Is(select.0), Boolean::Is(select.1));
 
     let and = Boolean::and(&mut *cs, &select.0, &select.1)?;
     let or = Boolean::and(&mut *cs, &select.0.not(), &select.1.not())?.not();
 
     // v0 == s0_or_s1 ? p[0] : v
-    let v0 = common::groth16::mux(&mut *cs, &or, &v.clone().into(), &p[0].clone().into())?;
+    let v0 = common::groth16::mux(&mut *cs, &or, &v.clone(), &p[0].clone().into())?;
 
     //v1p == s0 ? v : p[0]
-    let v1p = common::groth16::mux(&mut *cs, &select.0, &p[0].clone().into(), &v.clone().into())?;
+    let v1p = common::groth16::mux(&mut *cs, &select.0, &p[0].clone().into(), &v.clone())?;
 
     //v1 == s1 ? p[1] : v1p
     let v1 = common::groth16::mux(&mut *cs, &select.1, &v1p.into(), &p[1].clone().into())?;
 
     //v2p == s0 ? p[2] : v
-    let v2p = common::groth16::mux(&mut *cs, &select.0, &v.clone().into(), &p[2].clone().into())?;
+    let v2p = common::groth16::mux(&mut *cs, &select.0, &v.clone(), &p[2].clone().into())?;
 
     //v2 == s1 ? v2p : p[1]
     let v2 = common::groth16::mux(&mut *cs, &select.1, &p[1].clone().into(), &v2p.into())?;
 
     //v3 == s0_and_s1 ? v : p[2]
-    let v3 = common::groth16::mux(&mut *cs, &and, &p[2].clone().into(), &v.into())?;
+    let v3 = common::groth16::mux(&mut *cs, &and, &p[2].clone().into(), &v)?;
 
-    poseidon::groth16::poseidon4(cs, v0.into(), v1.into(), v2.into(), v3.into())?.alloc(&mut *cs)
+    poseidon::groth16::poseidon4(cs, v0.into(), v1.into(), v2.into(), v3.into())
 }
 
 pub fn calc_root_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     index: Number,
-    val: AllocatedNum<BellmanFr>,
+    val: Number,
     proof: Vec<[AllocatedNum<BellmanFr>; 3]>,
-) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
+) -> Result<Number, SynthesisError> {
     let selectors = common::groth16::UnsignedInteger::constrain(&mut *cs, index, proof.len() * 2)?;
     let mut curr = val.clone();
     for (p, dir) in proof.into_iter().zip(selectors.bits().chunks(2)) {
@@ -56,9 +56,9 @@ pub fn check_proof_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     enabled: AllocatedBit,
     index: Number,
-    val: AllocatedNum<BellmanFr>,
+    val: Number,
     proof: Vec<[AllocatedNum<BellmanFr>; 3]>,
-    root: AllocatedNum<BellmanFr>,
+    root: Number,
 ) -> Result<(), SynthesisError> {
     let new_root = calc_root_poseidon4(&mut *cs, index, val, proof)?;
     common::groth16::assert_equal(cs, enabled, root, new_root)?;
@@ -119,7 +119,14 @@ mod test {
 
             let enabled = AllocatedBit::alloc(&mut *cs, Some(true))?;
 
-            check_proof_poseidon4(&mut *cs, enabled, index.into(), val, proof, root)?;
+            check_proof_poseidon4(
+                &mut *cs,
+                enabled,
+                index.into(),
+                val.into(),
+                proof,
+                root.into(),
+            )?;
 
             Ok(())
         }

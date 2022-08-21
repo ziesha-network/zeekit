@@ -222,7 +222,7 @@ pub fn verify_eddsa<CS: ConstraintSystem<BellmanFr>>(
     r_plus_ha = add_point(&mut *cs, r_plus_ha.clone(), sig_r)?;
     r_plus_ha = mul_cofactor(&mut *cs, r_plus_ha)?;
 
-    common::groth16::assert_equal(cs, enabled.clone(), r_plus_ha.x, sb.x)?;
-    common::groth16::assert_equal(cs, enabled, r_plus_ha.y, sb.y)?;
+    common::groth16::assert_equal(cs, enabled.clone(), r_plus_ha.x.into(), sb.x.into())?;
+    common::groth16::assert_equal(cs, enabled, r_plus_ha.y.into(), sb.y.into())?;
     Ok(())
 }
