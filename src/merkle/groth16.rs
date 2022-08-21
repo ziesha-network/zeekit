@@ -2,6 +2,7 @@ use crate::common::groth16::Number;
 use crate::BellmanFr;
 use crate::{common, poseidon};
 
+use crate::common::groth16::UnsignedInteger;
 use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, SynthesisError};
@@ -40,13 +41,13 @@ fn merge_hash_poseidon4<CS: ConstraintSystem<BellmanFr>>(
 
 pub fn calc_root_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    index: Number,
+    index: UnsignedInteger,
     val: Number,
     proof: Vec<[AllocatedNum<BellmanFr>; 3]>,
 ) -> Result<Number, SynthesisError> {
-    let selectors = common::groth16::UnsignedInteger::constrain(&mut *cs, index, proof.len() * 2)?;
+    assert_eq!(index.bits().len(), proof.len() * 2);
     let mut curr = val.clone();
-    for (p, dir) in proof.into_iter().zip(selectors.bits().chunks(2)) {
+    for (p, dir) in proof.into_iter().zip(index.bits().chunks(2)) {
         curr = merge_hash_poseidon4(&mut *cs, (dir[0].clone(), dir[1].clone()), &curr, p)?;
     }
     Ok(curr)
@@ -55,7 +56,7 @@ pub fn calc_root_poseidon4<CS: ConstraintSystem<BellmanFr>>(
 pub fn check_proof_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     enabled: AllocatedBit,
-    index: Number,
+    index: UnsignedInteger,
     val: Number,
     proof: Vec<[AllocatedNum<BellmanFr>; 3]>,
     root: Number,
@@ -118,6 +119,7 @@ mod test {
             }
 
             let enabled = AllocatedBit::alloc(&mut *cs, Some(true))?;
+            let index = UnsignedInteger::constrain(&mut *cs, index.into(), 8)?;
 
             check_proof_poseidon4(
                 &mut *cs,
