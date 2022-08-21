@@ -9,7 +9,7 @@ use bellman::{ConstraintSystem, SynthesisError};
 fn merge_hash_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     select: (AllocatedBit, AllocatedBit),
-    v: Number,
+    v: &Number,
     p: [AllocatedNum<BellmanFr>; 3],
 ) -> Result<Number, SynthesisError> {
     let select = (Boolean::Is(select.0), Boolean::Is(select.1));
@@ -18,16 +18,16 @@ fn merge_hash_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     let or = Boolean::and(&mut *cs, &select.0.not(), &select.1.not())?.not();
 
     // v0 == s0_or_s1 ? p[0] : v
-    let v0 = common::groth16::mux(&mut *cs, &or, &v.clone(), &p[0].clone().into())?;
+    let v0 = common::groth16::mux(&mut *cs, &or, v, &p[0].clone().into())?;
 
     //v1p == s0 ? v : p[0]
-    let v1p = common::groth16::mux(&mut *cs, &select.0, &p[0].clone().into(), &v.clone())?;
+    let v1p = common::groth16::mux(&mut *cs, &select.0, &p[0].clone().into(), v)?;
 
     //v1 == s1 ? p[1] : v1p
     let v1 = common::groth16::mux(&mut *cs, &select.1, &v1p.into(), &p[1].clone().into())?;
 
     //v2p == s0 ? p[2] : v
-    let v2p = common::groth16::mux(&mut *cs, &select.0, &v.clone(), &p[2].clone().into())?;
+    let v2p = common::groth16::mux(&mut *cs, &select.0, v, &p[2].clone().into())?;
 
     //v2 == s1 ? v2p : p[1]
     let v2 = common::groth16::mux(&mut *cs, &select.1, &p[1].clone().into(), &v2p.into())?;
@@ -47,7 +47,7 @@ pub fn calc_root_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     let selectors = common::groth16::UnsignedInteger::constrain(&mut *cs, index, proof.len() * 2)?;
     let mut curr = val.clone();
     for (p, dir) in proof.into_iter().zip(selectors.bits().chunks(2)) {
-        curr = merge_hash_poseidon4(&mut *cs, (dir[0].clone(), dir[1].clone()), curr, p)?;
+        curr = merge_hash_poseidon4(&mut *cs, (dir[0].clone(), dir[1].clone()), &curr, p)?;
     }
     Ok(curr)
 }
