@@ -1,4 +1,4 @@
-use crate::common::groth16::Number;
+use crate::common::groth16::{is_zero, Number};
 use crate::BellmanFr;
 use crate::{common, poseidon};
 
@@ -14,6 +14,30 @@ use std::ops::*;
 pub struct AllocatedPoint {
     pub x: AllocatedNum<BellmanFr>,
     pub y: AllocatedNum<BellmanFr>,
+}
+
+impl AllocatedPoint {
+    pub fn alloc<
+        CS: ConstraintSystem<BellmanFr>,
+        F: FnOnce() -> Result<PointAffine, SynthesisError>,
+    >(
+        cs: &mut CS,
+        f: F,
+    ) -> Result<AllocatedPoint, SynthesisError> {
+        let pnt = f()?;
+        let x = AllocatedNum::<BellmanFr>::alloc(&mut *cs, || Ok(pnt.0.into()))?;
+        let y = AllocatedNum::<BellmanFr>::alloc(&mut *cs, || Ok(pnt.1.into()))?;
+        /*let x_is_zero = Boolean::Is(is_zero(&mut *cs, &x.clone().into())?);
+        let y_is_zero = Boolean::Is(is_zero(&mut *cs, &y.clone().into())?);
+        let both_zero = Boolean::and(&mut *cs, &x_is_zero, &y_is_zero)?;
+        let x2 = x.mul(&mut *cs, &x)?;
+        let y2 = y.mul(&mut *cs, &y)?;
+        let x2y2 = x2.mul(&mut *cs, &y2)?;
+        let lhs = Number::from(y2) - Number::from(x2);
+        let mut rhs = Number::from((BellmanFr::from(*D), x2y2)) + Number::one::<CS>();*/
+
+        Ok(Self { x, y })
+    }
 }
 
 pub fn add_point<CS: ConstraintSystem<BellmanFr>>(
@@ -199,7 +223,7 @@ pub fn verify_eddsa<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     enabled: AllocatedBit,
     pk: AllocatedPoint,
-    msg: AllocatedNum<BellmanFr>,
+    msg: Number,
     sig_r: AllocatedPoint,
     sig_s: AllocatedNum<BellmanFr>,
 ) -> Result<(), SynthesisError> {
@@ -211,10 +235,10 @@ pub fn verify_eddsa<CS: ConstraintSystem<BellmanFr>>(
             sig_r.y.clone().into(),
             pk.x.clone().into(),
             pk.y.clone().into(),
-            msg.into(),
+            msg,
         ],
     )?
-    .alloc(&mut *cs)?;
+    .compress(&mut *cs)?;
 
     let sb = mul_const_point(&mut *cs, BASE_COFACTOR.clone(), sig_s)?;
 

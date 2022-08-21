@@ -13,10 +13,10 @@ impl Number {
         self.0 = self.0.clone() + (num, CS::one());
         self.1 = self.1.map(|v| v + num);
     }
-    pub fn add_num(&mut self, num: &AllocatedNum<BellmanFr>) {
-        self.0 = self.0.clone() + num.get_variable();
+    pub fn add_num(&mut self, coeff: BellmanFr, num: &AllocatedNum<BellmanFr>) {
+        self.0 = self.0.clone() + (coeff, num.get_variable());
         self.1 = if let Some(v) = self.1 {
-            num.get_value().map(|n| n + v)
+            num.get_value().map(|n| n * coeff + v)
         } else {
             None
         };
@@ -58,7 +58,7 @@ impl Number {
         );
         Ok(result)
     }
-    pub fn alloc<CS: ConstraintSystem<BellmanFr>>(
+    pub fn compress<CS: ConstraintSystem<BellmanFr>>(
         &self,
         cs: &mut CS,
     ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
@@ -93,6 +93,15 @@ impl From<AllocatedNum<BellmanFr>> for Number {
         Self(
             LinearCombination::<BellmanFr>::zero() + a.get_variable(),
             a.get_value(),
+        )
+    }
+}
+
+impl From<(BellmanFr, AllocatedNum<BellmanFr>)> for Number {
+    fn from(a: (BellmanFr, AllocatedNum<BellmanFr>)) -> Self {
+        Self(
+            LinearCombination::<BellmanFr>::zero() + (a.0, a.1.get_variable()),
+            a.1.get_value().map(|v| v * a.0),
         )
     }
 }

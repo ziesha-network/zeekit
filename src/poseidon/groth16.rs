@@ -53,7 +53,7 @@ pub fn partial_round<CS: ConstraintSystem<BellmanFr>>(
 
     vals[0] = sbox(&mut *cs, vals[0].clone())?;
     for i in 1..5 {
-        vals[i] = vals[i].clone().alloc(&mut *cs)?.into();
+        vals[i] = vals[i].clone().compress(&mut *cs)?.into();
     }
 
     product_mds(vals)
