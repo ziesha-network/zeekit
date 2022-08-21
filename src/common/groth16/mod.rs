@@ -76,38 +76,45 @@ pub fn not<CS: ConstraintSystem<BellmanFr>>(
 
 pub fn assert_equal<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    enabled: AllocatedBit,
+    enabled: &Boolean,
     a: Number,
     b: Number,
 ) -> Result<(), SynthesisError> {
-    let enabled_value = enabled.get_value();
-    let enabled_in_a = cs.alloc(
-        || "",
-        || {
-            enabled_value
-                .map(|e| {
-                    if e {
-                        a.get_value()
-                    } else {
-                        Some(BellmanFr::zero())
-                    }
-                })
-                .unwrap_or(None)
-                .ok_or(SynthesisError::AssignmentMissing)
-        },
-    )?;
-    cs.enforce(
-        || "enabled * a == enabled_in_a",
-        |lc| lc + enabled.get_variable(),
-        |lc| lc + a.get_lc(),
-        |lc| lc + enabled_in_a,
-    );
-    cs.enforce(
-        || "enabled * b == enabled_in_a",
-        |lc| lc + enabled.get_variable(),
-        |lc| lc + b.get_lc(),
-        |lc| lc + enabled_in_a,
-    );
+    match enabled {
+        Boolean::Is(enabled) => {
+            let enabled_value = enabled.get_value();
+            let enabled_in_a = cs.alloc(
+                || "",
+                || {
+                    enabled_value
+                        .map(|e| {
+                            if e {
+                                a.get_value()
+                            } else {
+                                Some(BellmanFr::zero())
+                            }
+                        })
+                        .unwrap_or(None)
+                        .ok_or(SynthesisError::AssignmentMissing)
+                },
+            )?;
+            cs.enforce(
+                || "enabled * a == enabled_in_a",
+                |lc| lc + enabled.get_variable(),
+                |lc| lc + a.get_lc(),
+                |lc| lc + enabled_in_a,
+            );
+            cs.enforce(
+                || "enabled * b == enabled_in_a",
+                |lc| lc + enabled.get_variable(),
+                |lc| lc + b.get_lc(),
+                |lc| lc + enabled_in_a,
+            );
+        }
+        _ => {
+            unimplemented!();
+        }
+    }
     Ok(())
 }
 

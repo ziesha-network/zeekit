@@ -4,7 +4,7 @@ use crate::{common, poseidon};
 
 use bazuka::crypto::jubjub::{PointAffine, A, BASE_COFACTOR, D};
 
-use bellman::gadgets::boolean::{AllocatedBit, Boolean};
+use bellman::gadgets::boolean::Boolean;
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, SynthesisError};
 use ff::Field;
@@ -27,16 +27,29 @@ impl AllocatedPoint {
         let pnt = f()?;
         let x = AllocatedNum::<BellmanFr>::alloc(&mut *cs, || Ok(pnt.0.into()))?;
         let y = AllocatedNum::<BellmanFr>::alloc(&mut *cs, || Ok(pnt.1.into()))?;
-        /*let x_is_zero = Boolean::Is(is_zero(&mut *cs, &x.clone().into())?);
-        let y_is_zero = Boolean::Is(is_zero(&mut *cs, &y.clone().into())?);
-        let both_zero = Boolean::and(&mut *cs, &x_is_zero, &y_is_zero)?;
-        let x2 = x.mul(&mut *cs, &x)?;
-        let y2 = y.mul(&mut *cs, &y)?;
+        Ok(Self { x, y })
+    }
+
+    pub fn is_null<CS: ConstraintSystem<BellmanFr>>(
+        &self,
+        cs: &mut CS,
+    ) -> Result<Boolean, SynthesisError> {
+        let x_is_zero = Boolean::Is(is_zero(&mut *cs, &self.x.clone().into())?);
+        let y_is_zero = Boolean::Is(is_zero(&mut *cs, &self.y.clone().into())?);
+        Ok(Boolean::and(&mut *cs, &x_is_zero, &y_is_zero)?)
+    }
+
+    pub fn assert_on_curve<CS: ConstraintSystem<BellmanFr>>(
+        &self,
+        cs: &mut CS,
+        enabled: &Boolean,
+    ) -> Result<(), SynthesisError> {
+        let x2 = self.x.mul(&mut *cs, &self.x)?;
+        let y2 = self.y.mul(&mut *cs, &self.y)?;
         let x2y2 = x2.mul(&mut *cs, &y2)?;
         let lhs = Number::from(y2) - Number::from(x2);
-        let mut rhs = Number::from((BellmanFr::from(*D), x2y2)) + Number::one::<CS>();*/
-
-        Ok(Self { x, y })
+        let rhs = Number::from((BellmanFr::from(*D), x2y2)) + Number::one::<CS>();
+        common::groth16::assert_equal(cs, enabled, lhs, rhs)
     }
 }
 
@@ -221,7 +234,7 @@ pub fn mul_cofactor<CS: ConstraintSystem<BellmanFr>>(
 
 pub fn verify_eddsa<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    enabled: AllocatedBit,
+    enabled: &Boolean,
     pk: AllocatedPoint,
     msg: Number,
     sig_r: AllocatedPoint,
@@ -246,7 +259,7 @@ pub fn verify_eddsa<CS: ConstraintSystem<BellmanFr>>(
     r_plus_ha = add_point(&mut *cs, r_plus_ha.clone(), sig_r)?;
     r_plus_ha = mul_cofactor(&mut *cs, r_plus_ha)?;
 
-    common::groth16::assert_equal(cs, enabled.clone(), r_plus_ha.x.into(), sb.x.into())?;
+    common::groth16::assert_equal(cs, enabled, r_plus_ha.x.into(), sb.x.into())?;
     common::groth16::assert_equal(cs, enabled, r_plus_ha.y.into(), sb.y.into())?;
     Ok(())
 }

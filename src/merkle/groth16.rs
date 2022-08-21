@@ -55,7 +55,7 @@ pub fn calc_root_poseidon4<CS: ConstraintSystem<BellmanFr>>(
 
 pub fn check_proof_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    enabled: AllocatedBit,
+    enabled: &Boolean,
     index: UnsignedInteger,
     val: Number,
     proof: Vec<[AllocatedNum<BellmanFr>; 3]>,
@@ -118,12 +118,12 @@ mod test {
                 ]);
             }
 
-            let enabled = AllocatedBit::alloc(&mut *cs, Some(true))?;
+            let enabled = Boolean::Is(AllocatedBit::alloc(&mut *cs, Some(true))?);
             let index = UnsignedInteger::constrain(&mut *cs, index.into(), 8)?;
 
             check_proof_poseidon4(
                 &mut *cs,
-                enabled,
+                &enabled,
                 index.into(),
                 val.into(),
                 proof,
