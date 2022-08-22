@@ -1,5 +1,5 @@
 use crate::common::groth16::Number;
-use crate::poseidon::groth16::{poseidon, poseidon4};
+use crate::poseidon::groth16::poseidon;
 use crate::BellmanFr;
 use bazuka::zk::ZkStateModel;
 use bellman::{ConstraintSystem, SynthesisError};
@@ -50,7 +50,7 @@ pub fn reveal<CS: ConstraintSystem<BellmanFr>>(
             while leaves.len() != 1 {
                 let mut new_leaves = Vec::new();
                 for chunk in leaves.chunks(4) {
-                    let hash = poseidon4(&mut *cs, &chunk[0], &chunk[1], &chunk[2], &chunk[3])?;
+                    let hash = poseidon(&mut *cs, &[&chunk[0], &chunk[1], &chunk[2], &chunk[3]])?;
                     new_leaves.push(hash);
                 }
                 leaves = new_leaves;

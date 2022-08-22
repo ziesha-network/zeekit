@@ -36,7 +36,7 @@ fn merge_hash_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     //v3 == s0_and_s1 ? v : p[2]
     let v3 = common::groth16::mux(&mut *cs, &and, &p[2].clone().into(), &v)?;
 
-    poseidon::groth16::poseidon4(cs, &v0.into(), &v1.into(), &v2.into(), &v3.into())
+    poseidon::groth16::poseidon(cs, &[&v0.into(), &v1.into(), &v2.into(), &v3.into()])
 }
 
 pub fn calc_root_poseidon4<CS: ConstraintSystem<BellmanFr>>(

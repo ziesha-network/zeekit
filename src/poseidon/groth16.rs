@@ -1,7 +1,7 @@
 use crate::common::groth16::Number;
 use crate::BellmanFr;
 
-use bazuka::zk::poseidon4::{MDS_MATRIX, ROUNDSF, ROUNDSP, ROUND_CONSTANTS};
+use bazuka::zk::poseidon::params_for_arity;
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
 
@@ -38,21 +38,22 @@ pub fn sbox<CS: ConstraintSystem<BellmanFr>>(
     ))
 }
 
-pub fn add_constants<CS: ConstraintSystem<BellmanFr>>(vals: &mut [Number; 5], const_offset: usize) {
-    for i in 0..5 {
-        vals[i].add_constant::<CS>(ROUND_CONSTANTS[const_offset + i].into());
+pub fn add_constants<CS: ConstraintSystem<BellmanFr>>(vals: &mut [Number], const_offset: usize) {
+    let params = params_for_arity(vals.len() - 1);
+    for (i, val) in vals.iter_mut().enumerate() {
+        val.add_constant::<CS>(params.round_constants[const_offset + i].into());
     }
 }
 
 pub fn partial_round<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     const_offset: usize,
-    mut vals: [Number; 5],
-) -> Result<[Number; 5], SynthesisError> {
+    mut vals: Vec<Number>,
+) -> Result<Vec<Number>, SynthesisError> {
     add_constants::<CS>(&mut vals, const_offset);
 
     vals[0] = sbox(&mut *cs, &vals[0])?;
-    for i in 1..5 {
+    for i in 1..vals.len() {
         vals[i] = vals[i].clone().compress(&mut *cs)?.into();
     }
 
@@ -62,28 +63,23 @@ pub fn partial_round<CS: ConstraintSystem<BellmanFr>>(
 pub fn full_round<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     const_offset: usize,
-    mut vals: [Number; 5],
-) -> Result<[Number; 5], SynthesisError> {
+    mut vals: Vec<Number>,
+) -> Result<Vec<Number>, SynthesisError> {
     add_constants::<CS>(&mut vals, const_offset);
 
-    for i in 0..5 {
-        vals[i] = sbox(&mut *cs, &vals[i])?;
+    for val in vals.iter_mut() {
+        *val = sbox(&mut *cs, val)?;
     }
 
     product_mds(vals)
 }
 
-pub fn product_mds(vals: [Number; 5]) -> Result<[Number; 5], SynthesisError> {
-    let mut result = [
-        Number::zero(),
-        Number::zero(),
-        Number::zero(),
-        Number::zero(),
-        Number::zero(),
-    ];
-    for j in 0..5 {
-        for k in 0..5 {
-            let mat_val: BellmanFr = MDS_MATRIX[j][k].into();
+pub fn product_mds(vals: Vec<Number>) -> Result<Vec<Number>, SynthesisError> {
+    let params = params_for_arity(vals.len() - 1);
+    let mut result = vec![Number::zero(); vals.len()];
+    for j in 0..vals.len() {
+        for k in 0..vals.len() {
+            let mat_val: BellmanFr = params.mds_constants[j][k].into();
             result[j].0 = result[j].0.clone() + (mat_val, &vals[k].0);
             result[j].1 = result[j].1.zip(vals[k].1).map(|(r, v)| r + v * mat_val);
         }
@@ -91,56 +87,32 @@ pub fn product_mds(vals: [Number; 5]) -> Result<[Number; 5], SynthesisError> {
     Ok(result)
 }
 
-pub fn poseidon4<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    a: &Number,
-    b: &Number,
-    c: &Number,
-    d: &Number,
-) -> Result<Number, SynthesisError> {
-    let mut elems = [Number::zero(), a.clone(), b.clone(), c.clone(), d.clone()];
-    let mut const_offset = 0;
-
-    for _ in 0..ROUNDSF / 2 {
-        elems = full_round(&mut *cs, const_offset, elems)?;
-        const_offset += 5;
-    }
-
-    for _ in 0..ROUNDSP {
-        elems = partial_round(&mut *cs, const_offset, elems)?;
-        const_offset += 5;
-    }
-
-    for _ in 0..ROUNDSF / 2 {
-        elems = full_round(&mut *cs, const_offset, elems)?;
-        const_offset += 5;
-    }
-
-    Ok(elems[1].clone())
-}
-
 pub fn poseidon<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     vals: &[&Number],
 ) -> Result<Number, SynthesisError> {
-    let mut first = vals[0].clone();
+    let mut elems = vals.iter().map(|v| (*v).clone()).collect::<Vec<Number>>();
+    elems.insert(0, Number::zero());
 
-    for chunk in vals[1..].chunks(3) {
-        first = match chunk.len() {
-            1 => poseidon4(
-                &mut *cs,
-                &first,
-                &chunk[0],
-                &Number::zero(),
-                &Number::zero(),
-            )?,
-            2 => poseidon4(&mut *cs, &first, &chunk[0], &chunk[1], &Number::zero())?,
-            3 => poseidon4(&mut *cs, &first, &chunk[0], &chunk[1], &chunk[2])?,
-            _ => panic!(),
-        };
+    let params = params_for_arity(elems.len() - 1);
+    let mut const_offset = 0;
+
+    for _ in 0..params.full_rounds / 2 {
+        elems = full_round(&mut *cs, const_offset, elems)?;
+        const_offset += elems.len();
     }
 
-    Ok(first)
+    for _ in 0..params.partial_rounds {
+        elems = partial_round(&mut *cs, const_offset, elems)?;
+        const_offset += elems.len();
+    }
+
+    for _ in 0..params.full_rounds / 2 {
+        elems = full_round(&mut *cs, const_offset, elems)?;
+        const_offset += elems.len();
+    }
+
+    Ok(elems[1].clone())
 }
 
 #[cfg(test)]
@@ -178,7 +150,7 @@ mod test {
             let d =
                 AllocatedNum::alloc(&mut *cs, || self.d.ok_or(SynthesisError::AssignmentMissing))?;
 
-            let res = poseidon4(&mut *cs, &a.into(), &b.into(), &c.into(), &d.into())?;
+            let res = poseidon(&mut *cs, &[&a.into(), &b.into(), &c.into(), &d.into()])?;
             cs.enforce(
                 || "",
                 |lc| lc + out.get_variable(),
@@ -190,7 +162,7 @@ mod test {
     }
 
     #[test]
-    fn test_poseidon4_circuit() {
+    fn test_poseidon_circuit() {
         let params = {
             let c = TestPoseidon4Circuit {
                 a: None,
@@ -204,12 +176,12 @@ mod test {
 
         let pvk = groth16::prepare_verifying_key(&params.vk);
 
-        let expected = bazuka::zk::poseidon4::poseidon4(
+        let expected = bazuka::zk::poseidon::poseidon(&[
             ZkScalar::from(123),
             ZkScalar::from(234),
             ZkScalar::from(345),
             ZkScalar::from(456),
-        );
+        ]);
 
         let c = TestPoseidon4Circuit {
             a: Some(ZkScalar::from(123).into()),
