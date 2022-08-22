@@ -7,7 +7,7 @@ use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
 
 pub fn sbox<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    a: Number,
+    a: &Number,
 ) -> Result<Number, SynthesisError> {
     let a2 = AllocatedNum::alloc(&mut *cs, || {
         a.1.map(|v| v.square())
@@ -51,7 +51,7 @@ pub fn partial_round<CS: ConstraintSystem<BellmanFr>>(
 ) -> Result<[Number; 5], SynthesisError> {
     add_constants::<CS>(&mut vals, const_offset);
 
-    vals[0] = sbox(&mut *cs, vals[0].clone())?;
+    vals[0] = sbox(&mut *cs, &vals[0])?;
     for i in 1..5 {
         vals[i] = vals[i].clone().compress(&mut *cs)?.into();
     }
@@ -67,7 +67,7 @@ pub fn full_round<CS: ConstraintSystem<BellmanFr>>(
     add_constants::<CS>(&mut vals, const_offset);
 
     for i in 0..5 {
-        vals[i] = sbox(&mut *cs, vals[i].clone())?;
+        vals[i] = sbox(&mut *cs, &vals[i])?;
     }
 
     product_mds(vals)
@@ -93,12 +93,12 @@ pub fn product_mds(vals: [Number; 5]) -> Result<[Number; 5], SynthesisError> {
 
 pub fn poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    a: Number,
-    b: Number,
-    c: Number,
-    d: Number,
+    a: &Number,
+    b: &Number,
+    c: &Number,
+    d: &Number,
 ) -> Result<Number, SynthesisError> {
-    let mut elems = [Number::zero(), a, b, c, d];
+    let mut elems = [Number::zero(), a.clone(), b.clone(), c.clone(), d.clone()];
     let mut const_offset = 0;
 
     for _ in 0..ROUNDSF / 2 {
@@ -121,7 +121,7 @@ pub fn poseidon4<CS: ConstraintSystem<BellmanFr>>(
 
 pub fn poseidon<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    vals: &[Number],
+    vals: &[&Number],
 ) -> Result<Number, SynthesisError> {
     let mut first = vals[0].clone();
 
@@ -129,25 +129,13 @@ pub fn poseidon<CS: ConstraintSystem<BellmanFr>>(
         first = match chunk.len() {
             1 => poseidon4(
                 &mut *cs,
-                first.clone(),
-                chunk[0].clone(),
-                Number::zero(),
-                Number::zero(),
+                &first,
+                &chunk[0],
+                &Number::zero(),
+                &Number::zero(),
             )?,
-            2 => poseidon4(
-                &mut *cs,
-                first.clone(),
-                chunk[0].clone(),
-                chunk[1].clone(),
-                Number::zero(),
-            )?,
-            3 => poseidon4(
-                &mut *cs,
-                first.clone(),
-                chunk[0].clone(),
-                chunk[1].clone(),
-                chunk[2].clone(),
-            )?,
+            2 => poseidon4(&mut *cs, &first, &chunk[0], &chunk[1], &Number::zero())?,
+            3 => poseidon4(&mut *cs, &first, &chunk[0], &chunk[1], &chunk[2])?,
             _ => panic!(),
         };
     }
@@ -190,7 +178,7 @@ mod test {
             let d =
                 AllocatedNum::alloc(&mut *cs, || self.d.ok_or(SynthesisError::AssignmentMissing))?;
 
-            let res = poseidon4(&mut *cs, a.into(), b.into(), c.into(), d.into())?;
+            let res = poseidon4(&mut *cs, &a.into(), &b.into(), &c.into(), &d.into())?;
             cs.enforce(
                 || "",
                 |lc| lc + out.get_variable(),

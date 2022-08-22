@@ -49,14 +49,14 @@ impl AllocatedPoint {
         let x2y2 = x2.mul(&mut *cs, &y2)?;
         let lhs = Number::from(y2) - Number::from(x2);
         let rhs = Number::from((BellmanFr::from(*D), x2y2)) + Number::one::<CS>();
-        common::groth16::assert_equal(cs, enabled, lhs, rhs)
+        common::groth16::assert_equal(cs, enabled, &lhs, &rhs)
     }
 }
 
 pub fn add_point<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    a: AllocatedPoint,
-    b: AllocatedPoint,
+    a: &AllocatedPoint,
+    b: &AllocatedPoint,
 ) -> Result<AllocatedPoint, SynthesisError> {
     let sum_value =
         a.x.get_value()
@@ -112,8 +112,8 @@ pub fn add_point<CS: ConstraintSystem<BellmanFr>>(
 
 pub fn add_const_point<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    a: AllocatedPoint,
-    b: PointAffine,
+    a: &AllocatedPoint,
+    b: &PointAffine,
 ) -> Result<AllocatedPoint, SynthesisError> {
     let sum_value = a.x.get_value().zip(a.y.get_value()).map(|(a_x, a_y)| {
         let mut sum = PointAffine(a_x.into(), a_y.into());
@@ -158,8 +158,8 @@ pub fn add_const_point<CS: ConstraintSystem<BellmanFr>>(
 
 pub fn mul_point<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    base: AllocatedPoint,
-    b: AllocatedNum<BellmanFr>,
+    base: &AllocatedPoint,
+    b: &AllocatedNum<BellmanFr>,
 ) -> Result<AllocatedPoint, SynthesisError> {
     let bits: Vec<Boolean> = b.to_bits_le_strict(&mut *cs)?.into_iter().rev().collect();
     let mut result = AllocatedPoint {
@@ -172,8 +172,8 @@ pub fn mul_point<CS: ConstraintSystem<BellmanFr>>(
         )?,
     };
     for bit in bits[1..].iter() {
-        result = add_point(&mut *cs, result.clone(), result)?;
-        let result_plus_base = add_point(&mut *cs, result.clone(), base.clone())?;
+        result = add_point(&mut *cs, &result, &result)?;
+        let result_plus_base = add_point(&mut *cs, &result, base)?;
         let result_x =
             common::groth16::mux(&mut *cs, &bit, &result.x.into(), &result_plus_base.x.into())?;
         let result_y =
@@ -188,8 +188,8 @@ pub fn mul_point<CS: ConstraintSystem<BellmanFr>>(
 
 pub fn mul_const_point<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    base: PointAffine,
-    b: AllocatedNum<BellmanFr>,
+    base: &PointAffine,
+    b: &AllocatedNum<BellmanFr>,
 ) -> Result<AllocatedPoint, SynthesisError> {
     let bits: Vec<Boolean> = b.to_bits_le_strict(&mut *cs)?.into_iter().rev().collect();
     let mut result = AllocatedPoint {
@@ -207,8 +207,8 @@ pub fn mul_const_point<CS: ConstraintSystem<BellmanFr>>(
         )?,
     };
     for bit in bits[1..].iter() {
-        result = add_point(&mut *cs, result.clone(), result)?;
-        let result_plus_base = add_const_point(&mut *cs, result.clone(), base.clone())?;
+        result = add_point(&mut *cs, &result, &result)?;
+        let result_plus_base = add_const_point(&mut *cs, &result, base)?;
         let result_x =
             common::groth16::mux(&mut *cs, &bit, &result.x.into(), &result_plus_base.x.into())?;
         let result_y =
@@ -224,42 +224,42 @@ pub fn mul_const_point<CS: ConstraintSystem<BellmanFr>>(
 // Mul by 8
 pub fn mul_cofactor<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    mut point: AllocatedPoint,
+    point: &AllocatedPoint,
 ) -> Result<AllocatedPoint, SynthesisError> {
-    point = add_point(&mut *cs, point.clone(), point)?;
-    point = add_point(&mut *cs, point.clone(), point)?;
-    point = add_point(&mut *cs, point.clone(), point)?;
-    Ok(point)
+    let mut pnt = add_point(&mut *cs, point, point)?;
+    pnt = add_point(&mut *cs, &pnt, &pnt)?;
+    pnt = add_point(&mut *cs, &pnt, &pnt)?;
+    Ok(pnt)
 }
 
 pub fn verify_eddsa<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     enabled: &Boolean,
-    pk: AllocatedPoint,
-    msg: Number,
-    sig_r: AllocatedPoint,
-    sig_s: AllocatedNum<BellmanFr>,
+    pk: &AllocatedPoint,
+    msg: &Number,
+    sig_r: &AllocatedPoint,
+    sig_s: &AllocatedNum<BellmanFr>,
 ) -> Result<(), SynthesisError> {
     // h=H(R,A,M)
     let h = poseidon::groth16::poseidon(
         &mut *cs,
         &[
-            sig_r.x.clone().into(),
-            sig_r.y.clone().into(),
-            pk.x.clone().into(),
-            pk.y.clone().into(),
+            &sig_r.x.clone().into(),
+            &sig_r.y.clone().into(),
+            &pk.x.clone().into(),
+            &pk.y.clone().into(),
             msg,
         ],
     )?
     .compress(&mut *cs)?;
 
-    let sb = mul_const_point(&mut *cs, BASE_COFACTOR.clone(), sig_s)?;
+    let sb = mul_const_point(&mut *cs, &BASE_COFACTOR, sig_s)?;
 
-    let mut r_plus_ha = mul_point(&mut *cs, pk.clone(), h)?;
-    r_plus_ha = add_point(&mut *cs, r_plus_ha.clone(), sig_r)?;
-    r_plus_ha = mul_cofactor(&mut *cs, r_plus_ha)?;
+    let mut r_plus_ha = mul_point(&mut *cs, pk, &h)?;
+    r_plus_ha = add_point(&mut *cs, &r_plus_ha, sig_r)?;
+    r_plus_ha = mul_cofactor(&mut *cs, &r_plus_ha)?;
 
-    common::groth16::assert_equal(cs, enabled, r_plus_ha.x.into(), sb.x.into())?;
-    common::groth16::assert_equal(cs, enabled, r_plus_ha.y.into(), sb.y.into())?;
+    common::groth16::assert_equal(cs, enabled, &r_plus_ha.x.into(), &sb.x.into())?;
+    common::groth16::assert_equal(cs, enabled, &r_plus_ha.y.into(), &sb.y.into())?;
     Ok(())
 }

@@ -32,7 +32,8 @@ pub fn reveal<CS: ConstraintSystem<BellmanFr>>(
             } else {
                 panic!("Invalid state!");
             }
-            poseidon(&mut *cs, &vals)
+            let ref_vals = vals.iter().map(|v| v).collect::<Vec<&Number>>();
+            poseidon(&mut *cs, &ref_vals)
         }
         ZkStateModel::List {
             log4_size,
@@ -49,13 +50,7 @@ pub fn reveal<CS: ConstraintSystem<BellmanFr>>(
             while leaves.len() != 1 {
                 let mut new_leaves = Vec::new();
                 for chunk in leaves.chunks(4) {
-                    let hash = poseidon4(
-                        &mut *cs,
-                        chunk[0].clone(),
-                        chunk[1].clone(),
-                        chunk[2].clone(),
-                        chunk[3].clone(),
-                    )?;
+                    let hash = poseidon4(&mut *cs, &chunk[0], &chunk[1], &chunk[2], &chunk[3])?;
                     new_leaves.push(hash);
                 }
                 leaves = new_leaves;

@@ -77,8 +77,8 @@ pub fn not<CS: ConstraintSystem<BellmanFr>>(
 pub fn assert_equal<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     enabled: &Boolean,
-    a: Number,
-    b: Number,
+    a: &Number,
+    b: &Number,
 ) -> Result<(), SynthesisError> {
     match enabled {
         Boolean::Is(enabled) => {

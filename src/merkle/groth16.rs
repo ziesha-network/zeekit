@@ -9,11 +9,11 @@ use bellman::{ConstraintSystem, SynthesisError};
 
 fn merge_hash_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    select: (AllocatedBit, AllocatedBit),
+    select: (&AllocatedBit, &AllocatedBit),
     v: &Number,
-    p: [AllocatedNum<BellmanFr>; 3],
+    p: &[AllocatedNum<BellmanFr>; 3],
 ) -> Result<Number, SynthesisError> {
-    let select = (Boolean::Is(select.0), Boolean::Is(select.1));
+    let select = (Boolean::Is(select.0.clone()), Boolean::Is(select.1.clone()));
 
     let and = Boolean::and(&mut *cs, &select.0, &select.1)?;
     let or = Boolean::and(&mut *cs, &select.0.not(), &select.1.not())?.not();
@@ -36,19 +36,19 @@ fn merge_hash_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     //v3 == s0_and_s1 ? v : p[2]
     let v3 = common::groth16::mux(&mut *cs, &and, &p[2].clone().into(), &v)?;
 
-    poseidon::groth16::poseidon4(cs, v0.into(), v1.into(), v2.into(), v3.into())
+    poseidon::groth16::poseidon4(cs, &v0.into(), &v1.into(), &v2.into(), &v3.into())
 }
 
 pub fn calc_root_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    index: UnsignedInteger,
-    val: Number,
-    proof: Vec<[AllocatedNum<BellmanFr>; 3]>,
+    index: &UnsignedInteger,
+    val: &Number,
+    proof: &[[AllocatedNum<BellmanFr>; 3]],
 ) -> Result<Number, SynthesisError> {
     assert_eq!(index.bits().len(), proof.len() * 2);
     let mut curr = val.clone();
     for (p, dir) in proof.into_iter().zip(index.bits().chunks(2)) {
-        curr = merge_hash_poseidon4(&mut *cs, (dir[0].clone(), dir[1].clone()), &curr, p)?;
+        curr = merge_hash_poseidon4(&mut *cs, (&dir[0], &dir[1]), &curr, p)?;
     }
     Ok(curr)
 }
@@ -56,13 +56,13 @@ pub fn calc_root_poseidon4<CS: ConstraintSystem<BellmanFr>>(
 pub fn check_proof_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     enabled: &Boolean,
-    index: UnsignedInteger,
-    val: Number,
-    proof: Vec<[AllocatedNum<BellmanFr>; 3]>,
-    root: Number,
+    index: &UnsignedInteger,
+    val: &Number,
+    proof: &[[AllocatedNum<BellmanFr>; 3]],
+    root: &Number,
 ) -> Result<(), SynthesisError> {
     let new_root = calc_root_poseidon4(&mut *cs, index, val, proof)?;
-    common::groth16::assert_equal(cs, enabled, root, new_root)?;
+    common::groth16::assert_equal(cs, enabled, root, &new_root)?;
     Ok(())
 }
 
@@ -124,10 +124,10 @@ mod test {
             check_proof_poseidon4(
                 &mut *cs,
                 &enabled,
-                index.into(),
-                val.into(),
-                proof,
-                root.into(),
+                &index.into(),
+                &val.into(),
+                &proof,
+                &root.into(),
             )?;
 
             Ok(())
