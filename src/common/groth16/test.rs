@@ -33,11 +33,11 @@ impl Circuit<BellmanFr> for TestIsEqualCircuit {
         })?;
         eq.inputize(&mut *cs)?;
 
-        let res = is_equal(&mut *cs, &a.into(), &b.into())?;
-        println!("{:?} {:?}", res.get_value(), eq.get_value());
+        let res_bool = is_equal(&mut *cs, &a.into(), &b.into())?;
+        let res = extract_bool::<CS>(&res_bool);
         cs.enforce(
             || "",
-            |lc| lc + res.get_variable(),
+            |lc| lc + res.get_lc(),
             |lc| lc + CS::one(),
             |lc| lc + eq.get_variable(),
         );
@@ -125,10 +125,11 @@ impl Circuit<BellmanFr> for TestLteCircuit {
         })?;
         is_lte.inputize(&mut *cs)?;
 
-        let res = a_64.lte(&mut *cs, &b_64)?;
+        let res_bool = a_64.lte(&mut *cs, &b_64)?;
+        let res = extract_bool::<CS>(&res_bool);
         cs.enforce(
             || "",
-            |lc| lc + res.get_variable(),
+            |lc| lc + res.get_lc(),
             |lc| lc + CS::one(),
             |lc| lc + is_lte.get_variable(),
         );

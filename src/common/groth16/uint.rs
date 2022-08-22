@@ -68,7 +68,7 @@ impl UnsignedInteger {
         &self,
         cs: &mut CS,
         other: &UnsignedInteger,
-    ) -> Result<AllocatedBit, SynthesisError> {
+    ) -> Result<Boolean, SynthesisError> {
         assert_eq!(self.num_bits(), other.num_bits());
         let num_bits = self.num_bits();
 
@@ -78,14 +78,14 @@ impl UnsignedInteger {
         sub.add_constant::<CS>(two_bits);
 
         let sub_bits = UnsignedInteger::constrain(&mut *cs, sub, num_bits + 2)?;
-        Ok(sub_bits.bits()[num_bits].clone())
+        Ok(Boolean::Is(sub_bits.bits()[num_bits].clone()))
     }
 
     pub fn gt<CS: ConstraintSystem<BellmanFr>>(
         &self,
         cs: &mut CS,
         other: &UnsignedInteger,
-    ) -> Result<AllocatedBit, SynthesisError> {
+    ) -> Result<Boolean, SynthesisError> {
         other.lt(cs, self)
     }
 
@@ -93,17 +93,15 @@ impl UnsignedInteger {
         &self,
         cs: &mut CS,
         other: &UnsignedInteger,
-    ) -> Result<AllocatedBit, SynthesisError> {
-        let gt = self.gt(cs, other)?;
-        not(cs, gt)
+    ) -> Result<Boolean, SynthesisError> {
+        Ok(self.gt(cs, other)?.not())
     }
 
     pub fn gte<CS: ConstraintSystem<BellmanFr>>(
         &self,
         cs: &mut CS,
         other: &UnsignedInteger,
-    ) -> Result<AllocatedBit, SynthesisError> {
-        let lt = self.lt(cs, other)?;
-        not(cs, lt)
+    ) -> Result<Boolean, SynthesisError> {
+        Ok(self.lt(cs, other)?.not())
     }
 }

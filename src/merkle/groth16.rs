@@ -62,7 +62,7 @@ pub fn check_proof_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     root: &Number,
 ) -> Result<(), SynthesisError> {
     let new_root = calc_root_poseidon4(&mut *cs, index, val, proof)?;
-    common::groth16::assert_equal(cs, enabled, root, &new_root)?;
+    common::groth16::assert_equal_if_enabled(cs, enabled, root, &new_root)?;
     Ok(())
 }
 

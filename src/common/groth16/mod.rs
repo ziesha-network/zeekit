@@ -17,7 +17,7 @@ use std::ops::{Add, Sub};
 pub fn is_zero<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     num: &Number,
-) -> Result<AllocatedBit, SynthesisError> {
+) -> Result<Boolean, SynthesisError> {
     let is_zero = AllocatedBit::alloc(&mut *cs, num.get_value().map(|num| num.is_zero().into()))?;
     let inv = AllocatedNum::alloc(&mut *cs, || {
         num.get_value()
@@ -48,7 +48,7 @@ pub fn is_zero<CS: ConstraintSystem<BellmanFr>>(
         |lc| lc + num.get_lc(),
         |lc| lc,
     );
-    Ok(is_zero)
+    Ok(Boolean::Is(is_zero))
 }
 
 // Check a == b, two constraints
@@ -56,25 +56,20 @@ pub fn is_equal<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: &Number,
     b: &Number,
-) -> Result<AllocatedBit, SynthesisError> {
+) -> Result<Boolean, SynthesisError> {
     is_zero(cs, &(a.clone() - b.clone()))
 }
 
-pub fn not<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    a: AllocatedBit,
-) -> Result<AllocatedBit, SynthesisError> {
-    let bit = AllocatedBit::alloc(&mut *cs, a.get_value().map(|b| !b))?;
+pub fn assert_equal<CS: ConstraintSystem<BellmanFr>>(cs: &mut CS, a: &Number, b: &Number) {
     cs.enforce(
         || "",
-        |lc| lc + CS::one() - a.get_variable(),
+        |lc| lc + a.get_lc(),
         |lc| lc + CS::one(),
-        |lc| lc + bit.get_variable(),
+        |lc| lc + b.get_lc(),
     );
-    Ok(bit)
 }
 
-pub fn assert_equal<CS: ConstraintSystem<BellmanFr>>(
+pub fn assert_equal_if_enabled<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     enabled: &Boolean,
     a: &Number,
@@ -116,6 +111,20 @@ pub fn assert_equal<CS: ConstraintSystem<BellmanFr>>(
         }
     }
     Ok(())
+}
+
+pub fn extract_bool<CS: ConstraintSystem<BellmanFr>>(b: &Boolean) -> Number {
+    match b.clone() {
+        Boolean::Is(b) => b.into(),
+        Boolean::Not(not_b) => Number::one::<CS>() - not_b.into(),
+        Boolean::Constant(b_val) => {
+            if b_val {
+                Number::one::<CS>()
+            } else {
+                Number::zero()
+            }
+        }
+    }
 }
 
 #[cfg(test)]

@@ -34,8 +34,8 @@ impl AllocatedPoint {
         &self,
         cs: &mut CS,
     ) -> Result<Boolean, SynthesisError> {
-        let x_is_zero = Boolean::Is(is_zero(&mut *cs, &self.x.clone().into())?);
-        let y_is_zero = Boolean::Is(is_zero(&mut *cs, &self.y.clone().into())?);
+        let x_is_zero = is_zero(&mut *cs, &self.x.clone().into())?;
+        let y_is_zero = is_zero(&mut *cs, &self.y.clone().into())?;
         Ok(Boolean::and(&mut *cs, &x_is_zero, &y_is_zero)?)
     }
 
@@ -49,7 +49,7 @@ impl AllocatedPoint {
         let x2y2 = x2.mul(&mut *cs, &y2)?;
         let lhs = Number::from(y2) - Number::from(x2);
         let rhs = Number::from((BellmanFr::from(*D), x2y2)) + Number::one::<CS>();
-        common::groth16::assert_equal(cs, enabled, &lhs, &rhs)
+        common::groth16::assert_equal_if_enabled(cs, enabled, &lhs, &rhs)
     }
 }
 
@@ -259,7 +259,7 @@ pub fn verify_eddsa<CS: ConstraintSystem<BellmanFr>>(
     r_plus_ha = add_point(&mut *cs, &r_plus_ha, sig_r)?;
     r_plus_ha = mul_cofactor(&mut *cs, &r_plus_ha)?;
 
-    common::groth16::assert_equal(cs, enabled, &r_plus_ha.x.into(), &sb.x.into())?;
-    common::groth16::assert_equal(cs, enabled, &r_plus_ha.y.into(), &sb.y.into())?;
+    common::groth16::assert_equal_if_enabled(cs, enabled, &r_plus_ha.x.into(), &sb.x.into())?;
+    common::groth16::assert_equal_if_enabled(cs, enabled, &r_plus_ha.y.into(), &sb.y.into())?;
     Ok(())
 }
