@@ -127,5 +127,9 @@ pub fn extract_bool<CS: ConstraintSystem<BellmanFr>>(b: &Boolean) -> Number {
     }
 }
 
+pub fn assert_true<CS: ConstraintSystem<BellmanFr>>(cs: &mut CS, b: &Boolean) {
+    assert_equal(cs, &extract_bool::<CS>(b), &Number::one::<CS>());
+}
+
 #[cfg(test)]
 mod test;
