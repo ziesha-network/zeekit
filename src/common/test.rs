@@ -1,5 +1,6 @@
 use super::*;
 use crate::Bls12;
+use bellman::gadgets::boolean::AllocatedBit;
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{groth16, Circuit, ConstraintSystem, SynthesisError};
 use rand::rngs::OsRng;
@@ -33,7 +34,7 @@ impl Circuit<BellmanFr> for TestIsEqualCircuit {
         })?;
         eq.inputize(&mut *cs)?;
 
-        let res_bool = is_equal(&mut *cs, &a.into(), &b.into())?;
+        let res_bool = Number::from(a).is_equal(&mut *cs, &b.into())?;
         let res = extract_bool::<CS>(&res_bool);
         cs.enforce(
             || "",
@@ -237,7 +238,7 @@ impl Circuit<BellmanFr> for TestOrCircuit {
         expected.inputize(&mut *cs)?;
         let or = boolean_or(&mut *cs, &a, &b)?;
         let or_num = extract_bool::<CS>(&or);
-        assert_equal(&mut *cs, &or_num, &expected.into());
+        or_num.assert_equal(&mut *cs, &expected.into());
 
         Ok(())
     }

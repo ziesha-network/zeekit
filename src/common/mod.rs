@@ -7,66 +7,8 @@ pub use uint::*;
 
 use crate::BellmanFr;
 
-use bellman::gadgets::boolean::{AllocatedBit, Boolean};
-use bellman::gadgets::num::AllocatedNum;
+use bellman::gadgets::boolean::Boolean;
 use bellman::{ConstraintSystem, SynthesisError};
-use ff::Field;
-
-// Check if a number is zero, 2 constraints
-pub fn is_zero<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    num: &Number,
-) -> Result<Boolean, SynthesisError> {
-    let is_zero = AllocatedBit::alloc(&mut *cs, num.get_value().map(|num| num.is_zero().into()))?;
-    let inv = AllocatedNum::alloc(&mut *cs, || {
-        num.get_value()
-            .map(|num| {
-                if num.is_zero().into() {
-                    BellmanFr::zero()
-                } else {
-                    num.invert().unwrap()
-                }
-            })
-            .ok_or(SynthesisError::AssignmentMissing)
-    })?;
-
-    // Alice claims "is_zero == 0", so "-num * inv == -1", so "inv" should be "1/num"
-    // Calculating inv is only possible if num != 0
-
-    cs.enforce(
-        || "-num * inv == is_zero - 1",
-        |lc| lc - num.get_lc(),
-        |lc| lc + inv.get_variable(),
-        |lc| lc + is_zero.get_variable() - CS::one(),
-    );
-
-    // Alice claims "is_zero == 1". Since "is_zero * num == 0", num can only be 0
-    cs.enforce(
-        || "is_zero * num == 0",
-        |lc| lc + is_zero.get_variable(),
-        |lc| lc + num.get_lc(),
-        |lc| lc,
-    );
-    Ok(Boolean::Is(is_zero))
-}
-
-// Check a == b, two constraints
-pub fn is_equal<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    a: &Number,
-    b: &Number,
-) -> Result<Boolean, SynthesisError> {
-    is_zero(cs, &(a.clone() - b.clone()))
-}
-
-pub fn assert_equal<CS: ConstraintSystem<BellmanFr>>(cs: &mut CS, a: &Number, b: &Number) {
-    cs.enforce(
-        || "",
-        |lc| lc + a.get_lc(),
-        |lc| lc + CS::one(),
-        |lc| lc + b.get_lc(),
-    );
-}
 
 pub fn assert_equal_if_enabled<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
@@ -127,7 +69,7 @@ pub fn extract_bool<CS: ConstraintSystem<BellmanFr>>(b: &Boolean) -> Number {
 }
 
 pub fn assert_true<CS: ConstraintSystem<BellmanFr>>(cs: &mut CS, b: &Boolean) {
-    assert_equal(cs, &extract_bool::<CS>(b), &Number::one::<CS>());
+    extract_bool::<CS>(b).assert_equal(cs, &Number::one::<CS>());
 }
 
 pub fn assert_true_if_enabled<CS: ConstraintSystem<BellmanFr>>(

@@ -1,4 +1,4 @@
-use crate::common::{is_equal, is_zero, Number};
+use crate::common::Number;
 use crate::BellmanFr;
 use crate::{common, poseidon};
 
@@ -44,8 +44,8 @@ impl AllocatedPoint {
         &self,
         cs: &mut CS,
     ) -> Result<Boolean, SynthesisError> {
-        let x_is_zero = is_zero(&mut *cs, &self.x.clone().into())?;
-        let y_is_zero = is_zero(&mut *cs, &self.y.clone().into())?;
+        let x_is_zero = Number::from(self.x.clone()).is_zero(&mut *cs)?;
+        let y_is_zero = Number::from(self.y.clone()).is_zero(&mut *cs)?;
         Ok(Boolean::and(&mut *cs, &x_is_zero, &y_is_zero)?)
     }
 
@@ -54,8 +54,10 @@ impl AllocatedPoint {
         cs: &mut CS,
         other: &AllocatedPoint,
     ) -> Result<Boolean, SynthesisError> {
-        let xs_are_equal = is_equal(&mut *cs, &self.x.clone().into(), &other.x.clone().into())?;
-        let ys_are_equal = is_equal(&mut *cs, &self.y.clone().into(), &other.y.clone().into())?;
+        let xs_are_equal =
+            Number::from(self.x.clone()).is_equal(&mut *cs, &Number::from(other.x.clone()))?;
+        let ys_are_equal =
+            Number::from(self.y.clone()).is_equal(&mut *cs, &Number::from(other.y.clone()))?;
         Ok(Boolean::and(&mut *cs, &xs_are_equal, &ys_are_equal)?)
     }
 
