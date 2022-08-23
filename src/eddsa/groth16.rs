@@ -6,8 +6,8 @@ use bazuka::crypto::jubjub::{PointAffine, A, BASE_COFACTOR, D};
 
 use bellman::gadgets::boolean::Boolean;
 use bellman::gadgets::num::AllocatedNum;
+use bellman::Variable;
 use bellman::{ConstraintSystem, SynthesisError};
-use ff::Field;
 use std::ops::*;
 
 #[derive(Clone)]
@@ -17,6 +17,17 @@ pub struct AllocatedPoint {
 }
 
 impl AllocatedPoint {
+    pub fn get_variables(&self) -> (Variable, Variable) {
+        (self.x.get_variable(), self.y.get_variable())
+    }
+
+    pub fn get_value(&self) -> Option<PointAffine> {
+        self.x
+            .get_value()
+            .zip(self.y.get_value())
+            .map(|(x, y)| PointAffine(x.into(), y.into()))
+    }
+
     pub fn alloc<
         CS: ConstraintSystem<BellmanFr>,
         F: Fn() -> Result<PointAffine, SynthesisError>,
@@ -50,142 +61,171 @@ impl AllocatedPoint {
         let rhs = Number::from((BellmanFr::from(*D), x2y2)) + Number::one::<CS>();
         common::groth16::assert_equal_if_enabled(cs, enabled, &lhs, &rhs)
     }
-}
 
-pub fn add_point<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    a: &AllocatedPoint,
-    b: &AllocatedPoint,
-) -> Result<AllocatedPoint, SynthesisError> {
-    let sum_value =
-        a.x.get_value()
-            .zip(a.y.get_value())
-            .zip(b.x.get_value().zip(b.y.get_value()))
-            .map(|((a_x, a_y), (b_x, b_y))| {
-                if a_x.is_zero().into() && a_y.is_zero().into() {
-                    // If empty, do not need to calculate
-                    Default::default()
-                } else {
-                    let mut sum = PointAffine(a_x.into(), a_y.into());
-                    sum.add_assign(&PointAffine(b_x.into(), b_y.into()));
-                    sum
-                }
-            });
-    let sum_x = AllocatedNum::alloc(&mut *cs, || {
-        sum_value
-            .map(|v| v.0.into())
-            .ok_or(SynthesisError::AssignmentMissing)
-    })?;
-    let sum_y = AllocatedNum::alloc(&mut *cs, || {
-        sum_value
-            .map(|v| v.1.into())
-            .ok_or(SynthesisError::AssignmentMissing)
-    })?;
+    pub fn add_const<CS: ConstraintSystem<BellmanFr>>(
+        &self,
+        cs: &mut CS,
+        b: &PointAffine,
+    ) -> Result<AllocatedPoint, SynthesisError> {
+        let sum = AllocatedPoint::alloc(&mut *cs, || {
+            self.get_value()
+                .map(|a| {
+                    if !a.is_on_curve() || !b.is_on_curve() {
+                        // If invalid, do not need to calculate
+                        Default::default()
+                    } else {
+                        let mut sum = a.clone();
+                        sum.add_assign(&b);
+                        sum
+                    }
+                })
+                .ok_or(SynthesisError::AssignmentMissing)
+        })?;
 
-    let curve_d: BellmanFr = D.clone().into();
-    let common =
-        a.x.mul(&mut *cs, &b.x)?
-            .mul(&mut *cs, &a.y)?
-            .mul(&mut *cs, &b.y)?; // * CURVE_D
+        let bx: BellmanFr = b.0.into();
+        let by: BellmanFr = b.1.into();
+        let curve_d_bx_by: BellmanFr = Into::<BellmanFr>::into(D.clone()) * bx * by;
+        let common = self.x.mul(&mut *cs, &self.y)?; // * CURVE_D * bx * by
 
-    let x_1 = a.x.mul(&mut *cs, &b.y)?;
-    let x_2 = a.y.mul(&mut *cs, &b.x)?;
-    cs.enforce(
-        || "x_1 + x_2 == sum_x * (1 + common)",
-        |lc| lc + CS::one() + (curve_d, common.get_variable()),
-        |lc| lc + sum_x.get_variable(),
-        |lc| lc + x_1.get_variable() + x_2.get_variable(),
-    );
+        cs.enforce(
+            || "x_1 + x_2 == sum_x * (1 + common)",
+            |lc| lc + CS::one() + (curve_d_bx_by, common.get_variable()),
+            |lc| lc + sum.x.get_variable(),
+            |lc| lc + (by, self.x.get_variable()) + (bx, self.y.get_variable()),
+        );
 
-    let y_1 = a.y.mul(&mut *cs, &b.y)?;
-    let y_2 = a.x.mul(&mut *cs, &b.x)?; // * CURVE_A
-    cs.enforce(
-        || "y_1 - y_2 == sum_y * (1 - common)",
-        |lc| lc + CS::one() - (curve_d, common.get_variable()),
-        |lc| lc + sum_y.get_variable(),
-        |lc| lc + y_1.get_variable() - (A.clone().into(), y_2.get_variable()),
-    );
+        cs.enforce(
+            || "y_1 - y_2 == sum_y * (1 - common)",
+            |lc| lc + CS::one() - (curve_d_bx_by, common.get_variable()),
+            |lc| lc + sum.y.get_variable(),
+            |lc| {
+                lc + (by, self.y.get_variable())
+                    - (
+                        Into::<BellmanFr>::into(A.clone()) * bx,
+                        self.x.get_variable(),
+                    )
+            },
+        );
 
-    Ok(AllocatedPoint { x: sum_x, y: sum_y })
-}
-
-pub fn add_const_point<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    a: &AllocatedPoint,
-    b: &PointAffine,
-) -> Result<AllocatedPoint, SynthesisError> {
-    let sum_value = a.x.get_value().zip(a.y.get_value()).map(|(a_x, a_y)| {
-        let mut sum = PointAffine(a_x.into(), a_y.into());
-        sum.add_assign(&b);
-        sum
-    });
-    let sum_x = AllocatedNum::alloc(&mut *cs, || {
-        sum_value
-            .map(|v| v.0.into())
-            .ok_or(SynthesisError::AssignmentMissing)
-    })?;
-    let sum_y = AllocatedNum::alloc(&mut *cs, || {
-        sum_value
-            .map(|v| v.1.into())
-            .ok_or(SynthesisError::AssignmentMissing)
-    })?;
-
-    let bx: BellmanFr = b.0.into();
-    let by: BellmanFr = b.1.into();
-    let curve_d_bx_by: BellmanFr = Into::<BellmanFr>::into(D.clone()) * bx * by;
-    let common = a.x.mul(&mut *cs, &a.y)?; // * CURVE_D * bx * by
-
-    cs.enforce(
-        || "x_1 + x_2 == sum_x * (1 + common)",
-        |lc| lc + CS::one() + (curve_d_bx_by, common.get_variable()),
-        |lc| lc + sum_x.get_variable(),
-        |lc| lc + (by, a.x.get_variable()) + (bx, a.y.get_variable()),
-    );
-
-    cs.enforce(
-        || "y_1 - y_2 == sum_y * (1 - common)",
-        |lc| lc + CS::one() - (curve_d_bx_by, common.get_variable()),
-        |lc| lc + sum_y.get_variable(),
-        |lc| {
-            lc + (by, a.y.get_variable())
-                - (Into::<BellmanFr>::into(A.clone()) * bx, a.x.get_variable())
-        },
-    );
-
-    Ok(AllocatedPoint { x: sum_x, y: sum_y })
-}
-
-pub fn mul_point<CS: ConstraintSystem<BellmanFr>>(
-    cs: &mut CS,
-    base: &AllocatedPoint,
-    b: &AllocatedNum<BellmanFr>,
-) -> Result<AllocatedPoint, SynthesisError> {
-    let bits: Vec<Boolean> = b.to_bits_le_strict(&mut *cs)?.into_iter().rev().collect();
-    let mut result = AllocatedPoint {
-        x: common::groth16::mux(&mut *cs, &bits[0], &Number::zero(), &base.x.clone().into())?,
-        y: common::groth16::mux(
-            &mut *cs,
-            &bits[0],
-            &Number::constant::<CS>(BellmanFr::one()),
-            &base.y.clone().into(),
-        )?,
-    };
-    for bit in bits[1..].iter() {
-        result = add_point(&mut *cs, &result, &result)?;
-        let result_plus_base = add_point(&mut *cs, &result, base)?;
-        let result_x =
-            common::groth16::mux(&mut *cs, &bit, &result.x.into(), &result_plus_base.x.into())?;
-        let result_y =
-            common::groth16::mux(&mut *cs, &bit, &result.y.into(), &result_plus_base.y.into())?;
-        result = AllocatedPoint {
-            x: result_x,
-            y: result_y,
-        };
+        Ok(sum)
     }
-    Ok(result)
+
+    pub fn add<CS: ConstraintSystem<BellmanFr>>(
+        &self,
+        cs: &mut CS,
+        other: &AllocatedPoint,
+    ) -> Result<AllocatedPoint, SynthesisError> {
+        let sum = AllocatedPoint::alloc(&mut *cs, || {
+            self.get_value()
+                .zip(other.get_value())
+                .map(|(a, b)| {
+                    if !a.is_on_curve() || !b.is_on_curve() {
+                        // If invalid, do not need to calculate
+                        Default::default()
+                    } else {
+                        let mut sum = a.clone();
+                        sum.add_assign(&b);
+                        sum
+                    }
+                })
+                .ok_or(SynthesisError::AssignmentMissing)
+        })?;
+
+        let curve_d: BellmanFr = D.clone().into();
+        let common = self
+            .x
+            .mul(&mut *cs, &other.x)?
+            .mul(&mut *cs, &self.y)?
+            .mul(&mut *cs, &other.y)?; // * CURVE_D
+
+        let x_1 = self.x.mul(&mut *cs, &other.y)?;
+        let x_2 = self.y.mul(&mut *cs, &other.x)?;
+        cs.enforce(
+            || "x_1 + x_2 == sum_x * (1 + common)",
+            |lc| lc + CS::one() + (curve_d, common.get_variable()),
+            |lc| lc + sum.x.get_variable(),
+            |lc| lc + x_1.get_variable() + x_2.get_variable(),
+        );
+
+        let y_1 = self.y.mul(&mut *cs, &other.y)?;
+        let y_2 = self.x.mul(&mut *cs, &other.x)?; // * CURVE_A
+        cs.enforce(
+            || "y_1 - y_2 == sum_y * (1 - common)",
+            |lc| lc + CS::one() - (curve_d, common.get_variable()),
+            |lc| lc + sum.y.get_variable(),
+            |lc| lc + y_1.get_variable() - (A.clone().into(), y_2.get_variable()),
+        );
+
+        Ok(sum)
+    }
+
+    pub fn mul<CS: ConstraintSystem<BellmanFr>>(
+        &self,
+        cs: &mut CS,
+        b: &AllocatedNum<BellmanFr>,
+    ) -> Result<AllocatedPoint, SynthesisError> {
+        let bits: Vec<Boolean> = b.to_bits_le_strict(&mut *cs)?.into_iter().rev().collect();
+        let mut result = AllocatedPoint {
+            x: common::groth16::mux(&mut *cs, &bits[0], &Number::zero(), &self.x.clone().into())?,
+            y: common::groth16::mux(
+                &mut *cs,
+                &bits[0],
+                &Number::constant::<CS>(BellmanFr::one()),
+                &self.y.clone().into(),
+            )?,
+        };
+        for bit in bits[1..].iter() {
+            result = result.add(&mut *cs, &result)?;
+            let result_plus_base = result.add(&mut *cs, self)?;
+            let result_x =
+                common::groth16::mux(&mut *cs, &bit, &result.x.into(), &result_plus_base.x.into())?;
+            let result_y =
+                common::groth16::mux(&mut *cs, &bit, &result.y.into(), &result_plus_base.y.into())?;
+            result = AllocatedPoint {
+                x: result_x,
+                y: result_y,
+            };
+        }
+        Ok(result)
+    }
+
+    pub fn base_mul<CS: ConstraintSystem<BellmanFr>>(
+        cs: &mut CS,
+        base: &PointAffine,
+        b: &AllocatedNum<BellmanFr>,
+    ) -> Result<AllocatedPoint, SynthesisError> {
+        let bits: Vec<Boolean> = b.to_bits_le_strict(&mut *cs)?.into_iter().rev().collect();
+        let mut result = AllocatedPoint {
+            x: common::groth16::mux(
+                &mut *cs,
+                &bits[0],
+                &Number::zero(),
+                &Number::constant::<CS>(base.0.into()),
+            )?,
+            y: common::groth16::mux(
+                &mut *cs,
+                &bits[0],
+                &Number::constant::<CS>(BellmanFr::one()),
+                &Number::constant::<CS>(base.1.into()),
+            )?,
+        };
+        for bit in bits[1..].iter() {
+            result = result.add(&mut *cs, &result)?;
+            let result_plus_base = result.add_const(&mut *cs, base)?;
+            let result_x =
+                common::groth16::mux(&mut *cs, &bit, &result.x.into(), &result_plus_base.x.into())?;
+            let result_y =
+                common::groth16::mux(&mut *cs, &bit, &result.y.into(), &result_plus_base.y.into())?;
+            result = AllocatedPoint {
+                x: result_x,
+                y: result_y,
+            };
+        }
+        Ok(result)
+    }
 }
 
-pub fn mul_const_point<CS: ConstraintSystem<BellmanFr>>(
+pub fn base_mul<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     base: &PointAffine,
     b: &AllocatedNum<BellmanFr>,
@@ -206,8 +246,8 @@ pub fn mul_const_point<CS: ConstraintSystem<BellmanFr>>(
         )?,
     };
     for bit in bits[1..].iter() {
-        result = add_point(&mut *cs, &result, &result)?;
-        let result_plus_base = add_const_point(&mut *cs, &result, base)?;
+        result = result.add(&mut *cs, &result)?;
+        let result_plus_base = result.add_const(&mut *cs, base)?;
         let result_x =
             common::groth16::mux(&mut *cs, &bit, &result.x.into(), &result_plus_base.x.into())?;
         let result_y =
@@ -225,9 +265,9 @@ pub fn mul_cofactor<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     point: &AllocatedPoint,
 ) -> Result<AllocatedPoint, SynthesisError> {
-    let mut pnt = add_point(&mut *cs, point, point)?;
-    pnt = add_point(&mut *cs, &pnt, &pnt)?;
-    pnt = add_point(&mut *cs, &pnt, &pnt)?;
+    let mut pnt = point.add(&mut *cs, point)?;
+    pnt = pnt.add(&mut *cs, &pnt)?;
+    pnt = pnt.add(&mut *cs, &pnt)?;
     Ok(pnt)
 }
 
@@ -252,10 +292,10 @@ pub fn verify_eddsa<CS: ConstraintSystem<BellmanFr>>(
     )?
     .compress(&mut *cs)?;
 
-    let sb = mul_const_point(&mut *cs, &BASE_COFACTOR, sig_s)?;
+    let sb = base_mul(&mut *cs, &BASE_COFACTOR, sig_s)?;
 
-    let mut r_plus_ha = mul_point(&mut *cs, pk, &h)?;
-    r_plus_ha = add_point(&mut *cs, &r_plus_ha, sig_r)?;
+    let mut r_plus_ha = pk.mul(&mut *cs, &h)?;
+    r_plus_ha = r_plus_ha.add(&mut *cs, sig_r)?;
     r_plus_ha = mul_cofactor(&mut *cs, &r_plus_ha)?;
 
     common::groth16::assert_equal_if_enabled(cs, enabled, &r_plus_ha.x.into(), &sb.x.into())?;
