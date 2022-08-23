@@ -19,14 +19,13 @@ pub struct AllocatedPoint {
 impl AllocatedPoint {
     pub fn alloc<
         CS: ConstraintSystem<BellmanFr>,
-        F: FnOnce() -> Result<PointAffine, SynthesisError>,
+        F: Fn() -> Result<PointAffine, SynthesisError>,
     >(
         cs: &mut CS,
         f: F,
     ) -> Result<AllocatedPoint, SynthesisError> {
-        let pnt = f()?;
-        let x = AllocatedNum::<BellmanFr>::alloc(&mut *cs, || Ok(pnt.0.into()))?;
-        let y = AllocatedNum::<BellmanFr>::alloc(&mut *cs, || Ok(pnt.1.into()))?;
+        let x = AllocatedNum::<BellmanFr>::alloc(&mut *cs, || Ok(f()?.0.into()))?;
+        let y = AllocatedNum::<BellmanFr>::alloc(&mut *cs, || Ok(f()?.1.into()))?;
         Ok(Self { x, y })
     }
 
