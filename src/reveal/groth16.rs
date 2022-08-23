@@ -12,13 +12,13 @@ pub enum AllocatedState {
 
 pub fn reveal<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
-    state_model: ZkStateModel,
-    state: AllocatedState,
+    state_model: &ZkStateModel,
+    state: &AllocatedState,
 ) -> Result<Number, SynthesisError> {
     match state_model {
         ZkStateModel::Scalar => {
             if let AllocatedState::Value(v) = state {
-                return Ok(v);
+                return Ok(v.clone());
             } else {
                 panic!("Invalid state!");
             }
@@ -27,7 +27,7 @@ pub fn reveal<CS: ConstraintSystem<BellmanFr>>(
             let mut vals = Vec::new();
             if let AllocatedState::Children(children) = state {
                 for (field_type, field_value) in field_types.iter().zip(children.into_iter()) {
-                    vals.push(reveal(&mut *cs, field_type.clone(), field_value)?);
+                    vals.push(reveal(&mut *cs, field_type, field_value)?);
                 }
             } else {
                 panic!("Invalid state!");
@@ -42,7 +42,7 @@ pub fn reveal<CS: ConstraintSystem<BellmanFr>>(
             let mut leaves = Vec::new();
             if let AllocatedState::Children(children) = state {
                 for i in 0..1 << (2 * log4_size) {
-                    leaves.push(reveal(&mut *cs, *item_type.clone(), children[i].clone())?);
+                    leaves.push(reveal(&mut *cs, item_type, &children[i])?);
                 }
             } else {
                 panic!("Invalid state!");
@@ -145,7 +145,7 @@ mod test {
                 &self.data,
             )?;
 
-            let root = reveal(&mut *cs, self.state_model.clone(), alloc_state)?;
+            let root = reveal(&mut *cs, &self.state_model, &alloc_state)?;
 
             cs.enforce(
                 || "",
