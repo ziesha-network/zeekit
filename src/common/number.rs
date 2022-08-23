@@ -1,4 +1,9 @@
-use super::*;
+use super::UnsignedInteger;
+use crate::BellmanFr;
+use bellman::gadgets::boolean::AllocatedBit;
+use bellman::gadgets::num::AllocatedNum;
+use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
+use std::ops::*;
 
 #[derive(Clone)]
 pub struct Number(pub LinearCombination<BellmanFr>, pub Option<BellmanFr>);

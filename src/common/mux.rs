@@ -1,4 +1,8 @@
-use super::*;
+use super::Number;
+use crate::BellmanFr;
+use bellman::gadgets::boolean::Boolean;
+use bellman::gadgets::num::AllocatedNum;
+use bellman::{ConstraintSystem, SynthesisError};
 
 pub fn mux<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,

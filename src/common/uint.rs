@@ -1,5 +1,10 @@
-use super::*;
+use super::Number;
+use crate::BellmanFr;
 use bazuka::zk::ZkScalar;
+use bellman::gadgets::boolean::{AllocatedBit, Boolean};
+use bellman::gadgets::num::AllocatedNum;
+use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
+use ff::PrimeFieldBits;
 
 #[derive(Clone)]
 pub struct UnsignedInteger {
