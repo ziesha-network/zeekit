@@ -235,7 +235,7 @@ impl Circuit<BellmanFr> for TestOrCircuit {
             )
         })?;
         expected.inputize(&mut *cs)?;
-        let or = or(&mut *cs, &a, &b)?;
+        let or = boolean_or(&mut *cs, &a, &b)?;
         let or_num = extract_bool::<CS>(&or);
         assert_equal(&mut *cs, &or_num, &expected.into());
 

@@ -1,4 +1,4 @@
-use crate::common::groth16::Number;
+use crate::common::groth16::{boolean_or, Number};
 use crate::BellmanFr;
 use crate::{common, poseidon};
 
@@ -16,7 +16,7 @@ fn merge_hash_poseidon4<CS: ConstraintSystem<BellmanFr>>(
     let select = (Boolean::Is(select.0.clone()), Boolean::Is(select.1.clone()));
 
     let and = Boolean::and(&mut *cs, &select.0, &select.1)?;
-    let or = Boolean::and(&mut *cs, &select.0.not(), &select.1.not())?.not();
+    let or = boolean_or(&mut *cs, &select.0, &select.1)?;
 
     // v0 == s0_or_s1 ? p[0] : v
     let v0 = common::groth16::mux(&mut *cs, &or, v, &p[0].clone().into())?;
