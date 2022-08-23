@@ -1,4 +1,4 @@
-use crate::common::groth16::{is_zero, Number};
+use crate::common::groth16::{is_equal, is_zero, Number};
 use crate::BellmanFr;
 use crate::{common, poseidon};
 
@@ -47,6 +47,16 @@ impl AllocatedPoint {
         let x_is_zero = is_zero(&mut *cs, &self.x.clone().into())?;
         let y_is_zero = is_zero(&mut *cs, &self.y.clone().into())?;
         Ok(Boolean::and(&mut *cs, &x_is_zero, &y_is_zero)?)
+    }
+
+    pub fn is_equal<CS: ConstraintSystem<BellmanFr>>(
+        &self,
+        cs: &mut CS,
+        other: &AllocatedPoint,
+    ) -> Result<Boolean, SynthesisError> {
+        let xs_are_equal = is_equal(&mut *cs, &self.x.clone().into(), &other.x.clone().into())?;
+        let ys_are_equal = is_equal(&mut *cs, &self.y.clone().into(), &other.y.clone().into())?;
+        Ok(Boolean::and(&mut *cs, &xs_are_equal, &ys_are_equal)?)
     }
 
     pub fn assert_on_curve<CS: ConstraintSystem<BellmanFr>>(

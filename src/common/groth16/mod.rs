@@ -131,6 +131,14 @@ pub fn assert_true<CS: ConstraintSystem<BellmanFr>>(cs: &mut CS, b: &Boolean) {
     assert_equal(cs, &extract_bool::<CS>(b), &Number::one::<CS>());
 }
 
+pub fn assert_true_if_enabled<CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    enabled: &Boolean,
+    cond: &Boolean,
+) -> Result<(), SynthesisError> {
+    assert_equal_if_enabled(cs, enabled, &extract_bool::<CS>(cond), &Number::one::<CS>())
+}
+
 pub fn boolean_or<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: &Boolean,
