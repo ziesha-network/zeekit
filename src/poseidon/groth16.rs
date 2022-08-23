@@ -3,39 +3,15 @@ use crate::BellmanFr;
 
 use bazuka::zk::poseidon::params_for_arity;
 use bellman::gadgets::num::AllocatedNum;
-use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
+use bellman::{ConstraintSystem, SynthesisError};
 
 pub fn sbox<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: &Number,
-) -> Result<Number, SynthesisError> {
-    let a2 = AllocatedNum::alloc(&mut *cs, || {
-        a.1.map(|v| v.square())
-            .ok_or(SynthesisError::AssignmentMissing)
-    })?;
-    cs.enforce(
-        || "",
-        |lc| lc + &a.0,
-        |lc| lc + &a.0,
-        |lc| lc + a2.get_variable(),
-    );
+) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
+    let a2 = a.mul(&mut *cs, &a)?;
     let a4 = a2.mul(&mut *cs, &a2)?;
-    let a5 = AllocatedNum::alloc(&mut *cs, || {
-        a4.get_value()
-            .zip(a.1)
-            .map(|(a4, a)| a4 * a)
-            .ok_or(SynthesisError::AssignmentMissing)
-    })?;
-    cs.enforce(
-        || "",
-        |lc| lc + a4.get_variable(),
-        |lc| lc + &a.0,
-        |lc| lc + a5.get_variable(),
-    );
-    Ok(Number(
-        LinearCombination::<BellmanFr>::zero() + a5.get_variable(),
-        a5.get_value(),
-    ))
+    a.mul(&mut *cs, &a4.into())
 }
 
 pub fn add_constants<CS: ConstraintSystem<BellmanFr>>(vals: &mut [Number], const_offset: usize) {
@@ -52,7 +28,7 @@ pub fn partial_round<CS: ConstraintSystem<BellmanFr>>(
 ) -> Result<Vec<Number>, SynthesisError> {
     add_constants::<CS>(&mut vals, const_offset);
 
-    vals[0] = sbox(&mut *cs, &vals[0])?;
+    vals[0] = sbox(&mut *cs, &vals[0])?.into();
     for i in 1..vals.len() {
         vals[i] = vals[i].clone().compress(&mut *cs)?.into();
     }
@@ -68,7 +44,7 @@ pub fn full_round<CS: ConstraintSystem<BellmanFr>>(
     add_constants::<CS>(&mut vals, const_offset);
 
     for val in vals.iter_mut() {
-        *val = sbox(&mut *cs, val)?;
+        *val = sbox(&mut *cs, val)?.into();
     }
 
     product_mds(vals)
