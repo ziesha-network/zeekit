@@ -131,5 +131,13 @@ pub fn assert_true<CS: ConstraintSystem<BellmanFr>>(cs: &mut CS, b: &Boolean) {
     assert_equal(cs, &extract_bool::<CS>(b), &Number::one::<CS>());
 }
 
+pub fn or<CS: ConstraintSystem<BellmanFr>>(
+    cs: &mut CS,
+    a: &Boolean,
+    b: &Boolean,
+) -> Result<Boolean, SynthesisError> {
+    Ok(Boolean::and(&mut *cs, &a.not(), &b.not())?.not())
+}
+
 #[cfg(test)]
 mod test;
