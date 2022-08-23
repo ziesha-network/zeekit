@@ -188,41 +188,6 @@ impl AllocatedPoint {
         }
         Ok(result)
     }
-
-    pub fn base_mul<CS: ConstraintSystem<BellmanFr>>(
-        cs: &mut CS,
-        base: &PointAffine,
-        b: &AllocatedNum<BellmanFr>,
-    ) -> Result<AllocatedPoint, SynthesisError> {
-        let bits: Vec<Boolean> = b.to_bits_le_strict(&mut *cs)?.into_iter().rev().collect();
-        let mut result = AllocatedPoint {
-            x: common::groth16::mux(
-                &mut *cs,
-                &bits[0],
-                &Number::zero(),
-                &Number::constant::<CS>(base.0.into()),
-            )?,
-            y: common::groth16::mux(
-                &mut *cs,
-                &bits[0],
-                &Number::constant::<CS>(BellmanFr::one()),
-                &Number::constant::<CS>(base.1.into()),
-            )?,
-        };
-        for bit in bits[1..].iter() {
-            result = result.add(&mut *cs, &result)?;
-            let result_plus_base = result.add_const(&mut *cs, base)?;
-            let result_x =
-                common::groth16::mux(&mut *cs, &bit, &result.x.into(), &result_plus_base.x.into())?;
-            let result_y =
-                common::groth16::mux(&mut *cs, &bit, &result.y.into(), &result_plus_base.y.into())?;
-            result = AllocatedPoint {
-                x: result_x,
-                y: result_y,
-            };
-        }
-        Ok(result)
-    }
 }
 
 pub fn base_mul<CS: ConstraintSystem<BellmanFr>>(
