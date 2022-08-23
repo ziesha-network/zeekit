@@ -1,4 +1,5 @@
 use super::*;
+use bazuka::zk::ZkScalar;
 
 #[derive(Clone)]
 pub struct UnsignedInteger {
@@ -21,6 +22,14 @@ impl UnsignedInteger {
     }
     pub fn num_bits(&self) -> usize {
         self.bits.len()
+    }
+    pub fn alloc<CS: ConstraintSystem<BellmanFr>>(
+        cs: &mut CS,
+        val: ZkScalar,
+        bits: usize,
+    ) -> Result<Self, SynthesisError> {
+        let alloc = AllocatedNum::alloc(&mut *cs, || Ok(val.into()))?;
+        Self::constrain(cs, alloc.into(), bits)
     }
     pub fn alloc_32<CS: ConstraintSystem<BellmanFr>>(
         cs: &mut CS,
