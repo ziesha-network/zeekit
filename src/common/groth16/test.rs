@@ -209,3 +209,83 @@ fn test_lte_circuit() {
         );
     }
 }
+
+#[derive(Clone)]
+struct TestOrCircuit {
+    a: Option<bool>,
+    b: Option<bool>,
+    or_result: Option<bool>,
+}
+
+impl Circuit<BellmanFr> for TestOrCircuit {
+    fn synthesize<CS: ConstraintSystem<BellmanFr>>(
+        self,
+        cs: &mut CS,
+    ) -> Result<(), SynthesisError> {
+        let a = Boolean::Is(AllocatedBit::alloc(&mut *cs, self.a)?);
+        let b = Boolean::Is(AllocatedBit::alloc(&mut *cs, self.b)?);
+        let expected = AllocatedNum::alloc(&mut *cs, || {
+            Ok(
+                if self.or_result.ok_or(SynthesisError::AssignmentMissing)? {
+                    1
+                } else {
+                    0
+                }
+                .into(),
+            )
+        })?;
+        expected.inputize(&mut *cs)?;
+        let or = or(&mut *cs, &a, &b)?;
+        let or_num = extract_bool::<CS>(&or);
+        assert_equal(&mut *cs, &or_num, &expected.into());
+
+        Ok(())
+    }
+}
+
+#[test]
+fn test_or_circuit() {
+    let params = {
+        let c = TestOrCircuit {
+            a: None,
+            b: None,
+            or_result: None,
+        };
+        groth16::generate_random_parameters::<Bls12, _, _>(c, &mut OsRng).unwrap()
+    };
+
+    let pvk = groth16::prepare_verifying_key(&params.vk);
+
+    for (a, b, or, expected) in [
+        (false, false, false, true),
+        (true, false, true, true),
+        (false, true, true, true),
+        (true, true, true, true),
+        (false, false, true, false),
+        (true, false, false, false),
+        (false, true, false, false),
+        (true, true, false, false),
+    ] {
+        let c = TestOrCircuit {
+            a: Some(a),
+            b: Some(b),
+            or_result: Some(or),
+        };
+        let proof = groth16::create_random_proof(c.clone(), &params, &mut OsRng).unwrap();
+        assert_eq!(
+            groth16::verify_proof(
+                &pvk,
+                &proof,
+                &[c.or_result
+                    .map(|b| if b {
+                        BellmanFr::one()
+                    } else {
+                        BellmanFr::zero()
+                    })
+                    .unwrap()]
+            )
+            .is_ok(),
+            expected
+        );
+    }
+}
