@@ -63,8 +63,7 @@ pub fn product_mds(
     for j in 0..vals.len() {
         for k in 0..vals.len() {
             let mat_val: BellmanFr = params.mds_constants[j][k].into();
-            result[j].0 = result[j].0.clone() + (mat_val, &vals[k].0);
-            result[j].1 = result[j].1.zip(vals[k].1).map(|(r, v)| r + v * mat_val);
+            result[j] = result[j].clone() + (mat_val, vals[k].clone());
         }
     }
     Ok(result)

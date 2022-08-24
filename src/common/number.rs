@@ -139,6 +139,19 @@ impl Add for Number {
     }
 }
 
+impl Add<(BellmanFr, Number)> for Number {
+    type Output = Number;
+
+    fn add(self, other: (BellmanFr, Number)) -> Self {
+        Self(
+            self.0 + (other.0, &other.1 .0),
+            self.1
+                .zip(other.1 .1)
+                .map(|(slf, othr)| slf + other.0 * othr),
+        )
+    }
+}
+
 impl Sub for Number {
     type Output = Self;
 
