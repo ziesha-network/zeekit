@@ -277,3 +277,6 @@ pub fn verify_eddsa<CS: ConstraintSystem<BellmanFr>>(
     common::assert_equal_if_enabled(cs, enabled, &r_plus_ha.y.into(), &sb.y.into())?;
     Ok(())
 }
+
+#[cfg(test)]
+mod test;
