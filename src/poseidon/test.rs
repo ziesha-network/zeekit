@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::Bls12;
 use bazuka::zk::ZkScalar;
