@@ -1,7 +1,7 @@
 use crate::common::Number;
 use crate::BellmanFr;
 
-use bazuka::zk::poseidon::params_for_arity;
+use bazuka::zk::poseidon::PoseidonParams;
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, SynthesisError};
 
@@ -14,8 +14,11 @@ pub fn sbox<CS: ConstraintSystem<BellmanFr>>(
     a.mul(&mut *cs, &a4.into())
 }
 
-pub fn add_constants<CS: ConstraintSystem<BellmanFr>>(vals: &mut [Number], const_offset: usize) {
-    let params = params_for_arity(vals.len() - 1);
+pub fn add_constants<CS: ConstraintSystem<BellmanFr>>(
+    vals: &mut [Number],
+    const_offset: usize,
+    params: &PoseidonParams,
+) {
     for (i, val) in vals.iter_mut().enumerate() {
         val.add_constant::<CS>(params.round_constants[const_offset + i].into());
     }
@@ -25,33 +28,37 @@ pub fn partial_round<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     const_offset: usize,
     mut vals: Vec<Number>,
+    params: &PoseidonParams,
 ) -> Result<Vec<Number>, SynthesisError> {
-    add_constants::<CS>(&mut vals, const_offset);
+    add_constants::<CS>(&mut vals, const_offset, params);
 
     vals[0] = sbox(&mut *cs, &vals[0])?.into();
     for i in 1..vals.len() {
         vals[i] = vals[i].clone().compress(&mut *cs)?.into();
     }
 
-    product_mds(vals)
+    product_mds(vals, params)
 }
 
 pub fn full_round<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     const_offset: usize,
     mut vals: Vec<Number>,
+    params: &PoseidonParams,
 ) -> Result<Vec<Number>, SynthesisError> {
-    add_constants::<CS>(&mut vals, const_offset);
+    add_constants::<CS>(&mut vals, const_offset, params);
 
     for val in vals.iter_mut() {
         *val = sbox(&mut *cs, val)?.into();
     }
 
-    product_mds(vals)
+    product_mds(vals, params)
 }
 
-pub fn product_mds(vals: Vec<Number>) -> Result<Vec<Number>, SynthesisError> {
-    let params = params_for_arity(vals.len() - 1);
+pub fn product_mds(
+    vals: Vec<Number>,
+    params: &PoseidonParams,
+) -> Result<Vec<Number>, SynthesisError> {
     let mut result = vec![Number::zero(); vals.len()];
     for j in 0..vals.len() {
         for k in 0..vals.len() {
@@ -70,21 +77,21 @@ pub fn poseidon<CS: ConstraintSystem<BellmanFr>>(
     let mut elems = vals.iter().map(|v| (*v).clone()).collect::<Vec<Number>>();
     elems.insert(0, Number::zero());
 
-    let params = params_for_arity(elems.len() - 1);
+    let params = PoseidonParams::for_width(elems.len()).unwrap();
     let mut const_offset = 0;
 
     for _ in 0..params.full_rounds / 2 {
-        elems = full_round(&mut *cs, const_offset, elems)?;
+        elems = full_round(&mut *cs, const_offset, elems, &params)?;
         const_offset += elems.len();
     }
 
     for _ in 0..params.partial_rounds {
-        elems = partial_round(&mut *cs, const_offset, elems)?;
+        elems = partial_round(&mut *cs, const_offset, elems, &params)?;
         const_offset += elems.len();
     }
 
     for _ in 0..params.full_rounds / 2 {
-        elems = full_round(&mut *cs, const_offset, elems)?;
+        elems = full_round(&mut *cs, const_offset, elems, &params)?;
         const_offset += elems.len();
     }
 
