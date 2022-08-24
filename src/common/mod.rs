@@ -47,8 +47,13 @@ pub fn assert_equal_if_enabled<CS: ConstraintSystem<BellmanFr>>(
                 |lc| lc + enabled_in_a,
             );
         }
-        _ => {
+        Boolean::Not(_) => {
             unimplemented!();
+        }
+        Boolean::Constant(enabled) => {
+            if *enabled {
+                a.assert_equal(&mut *cs, b);
+            }
         }
     }
     Ok(())
