@@ -100,7 +100,5 @@ fn test_poseidon4_merkle_proofs() {
         };
         let proof = groth16::create_random_proof(c, &params, &mut OsRng).unwrap();
         assert!(groth16::verify_proof(&pvk, &proof, &[]).is_ok());
-
-        assert!(!groth16::verify_proof(&pvk, &proof, &[]).is_ok());
     }
 }
