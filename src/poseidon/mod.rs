@@ -5,7 +5,7 @@ use bazuka::zk::poseidon::PoseidonParams;
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, SynthesisError};
 
-pub fn sbox<CS: ConstraintSystem<BellmanFr>>(
+fn sbox<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     a: &Number,
 ) -> Result<AllocatedNum<BellmanFr>, SynthesisError> {
@@ -14,7 +14,7 @@ pub fn sbox<CS: ConstraintSystem<BellmanFr>>(
     a.mul(&mut *cs, &a4.into())
 }
 
-pub fn add_constants<CS: ConstraintSystem<BellmanFr>>(
+fn add_constants<CS: ConstraintSystem<BellmanFr>>(
     vals: &mut [Number],
     const_offset: usize,
     params: &PoseidonParams,
@@ -24,7 +24,7 @@ pub fn add_constants<CS: ConstraintSystem<BellmanFr>>(
     }
 }
 
-pub fn partial_round<CS: ConstraintSystem<BellmanFr>>(
+fn partial_round<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     const_offset: usize,
     mut vals: Vec<Number>,
@@ -40,7 +40,7 @@ pub fn partial_round<CS: ConstraintSystem<BellmanFr>>(
     product_mds(vals, params)
 }
 
-pub fn full_round<CS: ConstraintSystem<BellmanFr>>(
+fn full_round<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     const_offset: usize,
     mut vals: Vec<Number>,
@@ -55,10 +55,7 @@ pub fn full_round<CS: ConstraintSystem<BellmanFr>>(
     product_mds(vals, params)
 }
 
-pub fn product_mds(
-    vals: Vec<Number>,
-    params: &PoseidonParams,
-) -> Result<Vec<Number>, SynthesisError> {
+fn product_mds(vals: Vec<Number>, params: &PoseidonParams) -> Result<Vec<Number>, SynthesisError> {
     let mut result = vec![Number::zero(); vals.len()];
     for j in 0..vals.len() {
         for k in 0..vals.len() {

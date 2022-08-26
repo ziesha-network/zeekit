@@ -236,7 +236,7 @@ pub fn base_mul<CS: ConstraintSystem<BellmanFr>>(
 }
 
 // Mul by 8
-pub fn mul_cofactor<CS: ConstraintSystem<BellmanFr>>(
+fn mul_cofactor<CS: ConstraintSystem<BellmanFr>>(
     cs: &mut CS,
     point: &AllocatedPoint,
 ) -> Result<AllocatedPoint, SynthesisError> {
