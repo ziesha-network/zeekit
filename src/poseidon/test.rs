@@ -38,11 +38,6 @@ impl Circuit<BellmanFr> for TestPoseidon4Circuit {
         let out5 = AllocatedNum::alloc(&mut *cs, || {
             self.out5.ok_or(SynthesisError::AssignmentMissing)
         })?;
-        out1.inputize(&mut *cs)?;
-        out2.inputize(&mut *cs)?;
-        out3.inputize(&mut *cs)?;
-        out4.inputize(&mut *cs)?;
-        out5.inputize(&mut *cs)?;
 
         let a = AllocatedNum::alloc(&mut *cs, || self.a.ok_or(SynthesisError::AssignmentMissing))?;
         let b = AllocatedNum::alloc(&mut *cs, || self.b.ok_or(SynthesisError::AssignmentMissing))?;
@@ -153,15 +148,7 @@ fn test_poseidon_circuit() {
         out5: Some(expecteds[4].into()),
     };
     let proof = groth16::create_random_proof(c, &params, &mut OsRng).unwrap();
-    assert!(groth16::verify_proof(
-        &pvk,
-        &proof,
-        &expecteds
-            .iter()
-            .map(|v| v.clone().into())
-            .collect::<Vec<BellmanFr>>()
-    )
-    .is_ok());
+    assert!(groth16::verify_proof(&pvk, &proof, &[]).is_ok());
 
     let c = TestPoseidon4Circuit {
         a: Some(ZkScalar::from(123).into()),
@@ -176,13 +163,5 @@ fn test_poseidon_circuit() {
         out5: Some(expecteds[4].into()),
     };
     let proof = groth16::create_random_proof(c, &params, &mut OsRng).unwrap();
-    assert!(!groth16::verify_proof(
-        &pvk,
-        &proof,
-        &expecteds
-            .iter()
-            .map(|v| v.clone().into())
-            .collect::<Vec<BellmanFr>>()
-    )
-    .is_ok());
+    assert!(!groth16::verify_proof(&pvk, &proof, &[]).is_ok());
 }

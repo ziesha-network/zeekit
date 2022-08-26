@@ -19,21 +19,8 @@ impl Circuit<BellmanFr> for TestIsEqualCircuit {
         cs: &mut CS,
     ) -> Result<(), SynthesisError> {
         let a = AllocatedNum::alloc(&mut *cs, || self.a.ok_or(SynthesisError::AssignmentMissing))?;
-        a.inputize(&mut *cs)?;
         let b = AllocatedNum::alloc(&mut *cs, || self.b.ok_or(SynthesisError::AssignmentMissing))?;
-        b.inputize(&mut *cs)?;
-        let eq = AllocatedNum::alloc(&mut *cs, || {
-            self.is_equal
-                .map(|b| {
-                    if b {
-                        BellmanFr::one()
-                    } else {
-                        BellmanFr::zero()
-                    }
-                })
-                .ok_or(SynthesisError::AssignmentMissing)
-        })?;
-        eq.inputize(&mut *cs)?;
+        let eq = AllocatedBit::alloc(&mut *cs, self.is_equal)?;
 
         let res_bool = Number::from(a).is_equal(&mut *cs, &b.into())?;
         let res = extract_bool::<CS>(&res_bool);
@@ -73,25 +60,7 @@ fn test_is_equal_circuit() {
             is_equal: Some(eq),
         };
         let proof = groth16::create_random_proof(c.clone(), &params, &mut OsRng).unwrap();
-        assert_eq!(
-            groth16::verify_proof(
-                &pvk,
-                &proof,
-                &[
-                    c.a.unwrap(),
-                    c.b.unwrap(),
-                    c.is_equal
-                        .map(|b| if b {
-                            BellmanFr::one()
-                        } else {
-                            BellmanFr::zero()
-                        })
-                        .unwrap()
-                ]
-            )
-            .is_ok(),
-            expected
-        );
+        assert_eq!(groth16::verify_proof(&pvk, &proof, &[]).is_ok(), expected);
     }
 }
 
@@ -109,23 +78,10 @@ impl Circuit<BellmanFr> for TestLteCircuit {
         cs: &mut CS,
     ) -> Result<(), SynthesisError> {
         let a = AllocatedNum::alloc(&mut *cs, || self.a.ok_or(SynthesisError::AssignmentMissing))?;
-        a.inputize(&mut *cs)?;
         let a_64 = UnsignedInteger::constrain(&mut *cs, a.into(), self.num_bits)?;
         let b = AllocatedNum::alloc(&mut *cs, || self.b.ok_or(SynthesisError::AssignmentMissing))?;
-        b.inputize(&mut *cs)?;
         let b_64 = UnsignedInteger::constrain(&mut *cs, b.into(), self.num_bits)?;
-        let is_lte = AllocatedNum::alloc(&mut *cs, || {
-            self.is_lte
-                .map(|b| {
-                    if b {
-                        BellmanFr::one()
-                    } else {
-                        BellmanFr::zero()
-                    }
-                })
-                .ok_or(SynthesisError::AssignmentMissing)
-        })?;
-        is_lte.inputize(&mut *cs)?;
+        let is_lte = AllocatedBit::alloc(&mut *cs, self.is_lte)?;
 
         let res_bool = a_64.lte(&mut *cs, &b_64)?;
         let res = extract_bool::<CS>(&res_bool);
@@ -190,25 +146,7 @@ fn test_lte_circuit() {
             is_lte: Some(eq),
         };
         let proof = groth16::create_random_proof(c.clone(), &params, &mut OsRng).unwrap();
-        assert_eq!(
-            groth16::verify_proof(
-                &pvk,
-                &proof,
-                &[
-                    c.a.unwrap(),
-                    c.b.unwrap(),
-                    c.is_lte
-                        .map(|b| if b {
-                            BellmanFr::one()
-                        } else {
-                            BellmanFr::zero()
-                        })
-                        .unwrap()
-                ]
-            )
-            .is_ok(),
-            expected
-        );
+        assert_eq!(groth16::verify_proof(&pvk, &proof, &[]).is_ok(), expected);
     }
 }
 
@@ -226,17 +164,7 @@ impl Circuit<BellmanFr> for TestOrCircuit {
     ) -> Result<(), SynthesisError> {
         let a = Boolean::Is(AllocatedBit::alloc(&mut *cs, self.a)?);
         let b = Boolean::Is(AllocatedBit::alloc(&mut *cs, self.b)?);
-        let expected = AllocatedNum::alloc(&mut *cs, || {
-            Ok(
-                if self.or_result.ok_or(SynthesisError::AssignmentMissing)? {
-                    1
-                } else {
-                    0
-                }
-                .into(),
-            )
-        })?;
-        expected.inputize(&mut *cs)?;
+        let expected = AllocatedBit::alloc(&mut *cs, self.or_result)?;
         let or = boolean_or(&mut *cs, &a, &b)?;
         let or_num = extract_bool::<CS>(&or);
         or_num.assert_equal(&mut *cs, &expected.into());
@@ -274,20 +202,6 @@ fn test_or_circuit() {
             or_result: Some(or),
         };
         let proof = groth16::create_random_proof(c.clone(), &params, &mut OsRng).unwrap();
-        assert_eq!(
-            groth16::verify_proof(
-                &pvk,
-                &proof,
-                &[c.or_result
-                    .map(|b| if b {
-                        BellmanFr::one()
-                    } else {
-                        BellmanFr::zero()
-                    })
-                    .unwrap()]
-            )
-            .is_ok(),
-            expected
-        );
+        assert_eq!(groth16::verify_proof(&pvk, &proof, &[]).is_ok(), expected);
     }
 }

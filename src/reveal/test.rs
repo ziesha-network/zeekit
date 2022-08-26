@@ -72,7 +72,6 @@ impl Circuit<BellmanFr> for TestRevealCircuit {
         let out = AllocatedNum::alloc(&mut *cs, || {
             self.out.ok_or(SynthesisError::AssignmentMissing)
         })?;
-        out.inputize(&mut *cs)?;
 
         let alloc_state = extract_witnesses(
             &mut *cs,
@@ -138,5 +137,5 @@ fn test_reveal_circuit() {
         out: Some(expected.into()),
     };
     let proof = groth16::create_random_proof(c, &params, &mut OsRng).unwrap();
-    assert!(groth16::verify_proof(&pvk, &proof, &[expected.into()]).is_ok());
+    assert!(groth16::verify_proof(&pvk, &proof, &[]).is_ok());
 }

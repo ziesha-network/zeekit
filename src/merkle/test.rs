@@ -5,7 +5,6 @@ use bazuka::zk::{
 };
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{groth16, Circuit, ConstraintSystem, SynthesisError};
-use ff::Field;
 use rand::rngs::OsRng;
 
 struct TestPoseidon4MerkleProofCircuit {
@@ -29,9 +28,6 @@ impl Circuit<BellmanFr> for TestPoseidon4MerkleProofCircuit {
         let root = AllocatedNum::alloc(&mut *cs, || {
             self.root.ok_or(SynthesisError::AssignmentMissing)
         })?;
-        index.inputize(&mut *cs)?;
-        val.inputize(&mut *cs)?;
-        root.inputize(&mut *cs)?;
 
         let mut proof = Vec::new();
         for p in self.proof {
@@ -103,15 +99,8 @@ fn test_poseidon4_merkle_proofs() {
             root: Some(root.into()),
         };
         let proof = groth16::create_random_proof(c, &params, &mut OsRng).unwrap();
-        assert!(
-            groth16::verify_proof(&pvk, &proof, &[index.into(), val.into(), root.into()]).is_ok()
-        );
+        assert!(groth16::verify_proof(&pvk, &proof, &[]).is_ok());
 
-        assert!(!groth16::verify_proof(
-            &pvk,
-            &proof,
-            &[index.into(), val.into(), root.double().into()]
-        )
-        .is_ok());
+        assert!(!groth16::verify_proof(&pvk, &proof, &[]).is_ok());
     }
 }
