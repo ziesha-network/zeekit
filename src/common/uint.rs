@@ -1,4 +1,4 @@
-use super::Number;
+use super::*;
 use crate::BellmanFr;
 use bazuka::zk::ZkScalar;
 use bellman::gadgets::boolean::{AllocatedBit, Boolean};

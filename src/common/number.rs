@@ -1,4 +1,4 @@
-use super::UnsignedInteger;
+use super::*;
 use crate::BellmanFr;
 use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;

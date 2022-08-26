@@ -1,4 +1,4 @@
-use super::Number;
+use super::*;
 use crate::BellmanFr;
 use bellman::gadgets::boolean::Boolean;
 use bellman::gadgets::num::AllocatedNum;

@@ -1,6 +1,7 @@
 use super::*;
+use crate::BellmanFr;
 use crate::Bls12;
-use bellman::gadgets::boolean::AllocatedBit;
+use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{groth16, Circuit, ConstraintSystem, SynthesisError};
 use rand::rngs::OsRng;
