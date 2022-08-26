@@ -71,7 +71,7 @@ impl AllocatedPoint {
         let x2y2 = x2.mul(&mut *cs, &y2)?;
         let lhs = Number::from(y2) - Number::from(x2);
         let rhs = Number::from((BellmanFr::from(*D), x2y2)) + Number::one::<CS>();
-        common::assert_equal_if_enabled(cs, enabled, &lhs, &rhs)
+        lhs.assert_equal_if_enabled(cs, enabled, &rhs)
     }
 
     pub fn add_const<CS: ConstraintSystem<BellmanFr>>(
@@ -273,8 +273,9 @@ pub fn verify_eddsa<CS: ConstraintSystem<BellmanFr>>(
     r_plus_ha = r_plus_ha.add(&mut *cs, sig_r)?;
     r_plus_ha = mul_cofactor(&mut *cs, &r_plus_ha)?;
 
-    common::assert_equal_if_enabled(cs, enabled, &r_plus_ha.x.into(), &sb.x.into())?;
-    common::assert_equal_if_enabled(cs, enabled, &r_plus_ha.y.into(), &sb.y.into())?;
+    Number::from(r_plus_ha.x).assert_equal_if_enabled(cs, enabled, &sb.x.into())?;
+    Number::from(r_plus_ha.y).assert_equal_if_enabled(cs, enabled, &sb.y.into())?;
+
     Ok(())
 }
 

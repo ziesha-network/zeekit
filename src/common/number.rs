@@ -126,6 +126,55 @@ impl Number {
             |lc| lc + other.get_lc(),
         );
     }
+
+    pub fn assert_equal_if_enabled<CS: ConstraintSystem<BellmanFr>>(
+        &self,
+        cs: &mut CS,
+        enabled: &Boolean,
+        other: &Number,
+    ) -> Result<(), SynthesisError> {
+        match enabled {
+            Boolean::Is(enabled) => {
+                let enabled_value = enabled.get_value();
+                let enabled_in_self = cs.alloc(
+                    || "",
+                    || {
+                        enabled_value
+                            .map(|e| {
+                                if e {
+                                    self.get_value()
+                                } else {
+                                    Some(BellmanFr::zero())
+                                }
+                            })
+                            .unwrap_or(None)
+                            .ok_or(SynthesisError::AssignmentMissing)
+                    },
+                )?;
+                cs.enforce(
+                    || "enabled * self == enabled_in_self",
+                    |lc| lc + enabled.get_variable(),
+                    |lc| lc + self.get_lc(),
+                    |lc| lc + enabled_in_self,
+                );
+                cs.enforce(
+                    || "enabled * other == enabled_in_self",
+                    |lc| lc + enabled.get_variable(),
+                    |lc| lc + other.get_lc(),
+                    |lc| lc + enabled_in_self,
+                );
+            }
+            Boolean::Not(_) => {
+                unimplemented!();
+            }
+            Boolean::Constant(enabled) => {
+                if *enabled {
+                    self.assert_equal(&mut *cs, other);
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Add for Number {
