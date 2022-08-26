@@ -40,15 +40,13 @@ impl UnsignedInteger {
         cs: &mut CS,
         val: u32,
     ) -> Result<Self, SynthesisError> {
-        let alloc = AllocatedNum::alloc(&mut *cs, || Ok(BellmanFr::from(val as u64)))?;
-        Self::constrain(cs, alloc.into(), 32)
+        Self::alloc(cs, ZkScalar::from(val as u64), 32)
     }
     pub fn alloc_64<CS: ConstraintSystem<BellmanFr>>(
         cs: &mut CS,
         val: u64,
     ) -> Result<Self, SynthesisError> {
-        let alloc = AllocatedNum::alloc(&mut *cs, || Ok(BellmanFr::from(val)))?;
-        Self::constrain(cs, alloc.into(), 64)
+        Self::alloc(cs, ZkScalar::from(val), 64)
     }
     pub fn constrain<CS: ConstraintSystem<BellmanFr>>(
         cs: &mut CS,
