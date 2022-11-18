@@ -3,13 +3,13 @@ name = "zeekit"
 version = "0.7.0"
 edition = "2021"
 authors = ["Keyvan Kambakhsh <keyvankambakhsh@gmail.com>"]
-description = "Cryptography primitives and SNARK gadgets for Zeeka Network"
-repository = "https://github.com/zeeka-network/zeekit"
-homepage = "https://github.com/zeeka-network/zeekit"
+description = "Cryptography primitives and SNARK gadgets for Ziesha Network"
+repository = "https://github.com/ziesha-network/zeekit"
+homepage = "https://github.com/ziesha-network/zeekit"
 license = "MIT"
 
 [dependencies]
-bazuka = { git = "https://github.com/zeeka-network/bazuka", default_features = false }
+bazuka = { git = "https://github.com/ziesha-network/bazuka", default_features = false }
 rand = "0.8.5"
 ff = { version = "0.12", features = ["derive", "derive_bits"] }
 bellman = "0.13.0"
