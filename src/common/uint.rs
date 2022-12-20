@@ -4,7 +4,7 @@ use bazuka::zk::ZkScalar;
 use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
-use ff::PrimeFieldBits;
+use ff_bellman::PrimeFieldBits;
 
 #[derive(Clone)]
 pub struct UnsignedInteger {
