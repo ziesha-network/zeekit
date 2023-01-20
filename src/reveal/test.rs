@@ -40,7 +40,7 @@ fn extract_witnesses<CS: ConstraintSystem<BellmanFr>>(
                 children.push(extract_witnesses(
                     &mut *cs,
                     field_type,
-                    locator.index(i as u32),
+                    locator.index(i as u64),
                     pairs,
                 )?);
             }
@@ -55,7 +55,7 @@ fn extract_witnesses<CS: ConstraintSystem<BellmanFr>>(
                 children.push(extract_witnesses(
                     &mut *cs,
                     *item_type.clone(),
-                    locator.index(i as u32),
+                    locator.index(i as u64),
                     pairs,
                 )?);
             }

@@ -3,7 +3,7 @@ use crate::BellmanFr;
 use bellman::gadgets::boolean::{AllocatedBit, Boolean};
 use bellman::gadgets::num::AllocatedNum;
 use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
-use ff::Field;
+use ff_bellman::Field;
 use std::ops::*;
 
 #[derive(Clone)]

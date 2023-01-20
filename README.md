@@ -1,3 +1,3 @@
-# Zeeka SNARK gadget library
+# Ziesha SNARK gadget library
 
-[![Zeekit](https://github.com/zeeka-network/zeekit/actions/workflows/actions.yml/badge.svg)](https://github.com/zeeka-network/zeekit/actions/workflows/actions.yml)
+[![Zeekit](https://github.com/ziesha-network/zeekit/actions/workflows/actions.yml/badge.svg)](https://github.com/ziesha-network/zeekit/actions/workflows/actions.yml)
