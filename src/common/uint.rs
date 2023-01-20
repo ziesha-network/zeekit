@@ -28,6 +28,14 @@ impl UnsignedInteger {
     pub fn num_bits(&self) -> usize {
         self.bits.len()
     }
+    pub fn extract_bits(&self, count: usize) -> Self {
+        let mut num = Number::zero();
+        let bits = self.bits[..count].iter().cloned().collect::<Vec<_>>();
+        for b in bits.iter() {
+            num = num + Number::from(b.clone());
+        }
+        Self { num, bits }
+    }
     pub fn alloc<CS: ConstraintSystem<BellmanFr>>(
         cs: &mut CS,
         val: ZkScalar,
@@ -47,6 +55,21 @@ impl UnsignedInteger {
         val: u64,
     ) -> Result<Self, SynthesisError> {
         Self::alloc(cs, ZkScalar::from(val), 64)
+    }
+    pub fn constrain_strict<CS: ConstraintSystem<BellmanFr>>(
+        cs: &mut CS,
+        num: Number,
+    ) -> Result<Self, SynthesisError> {
+        let as_alloc = num.compress(&mut *cs)?;
+        let mut bits = Vec::new();
+        for bit in as_alloc.to_bits_le_strict(&mut *cs)? {
+            if let Boolean::Is(bit) = bit {
+                bits.push(bit);
+            } else {
+                return Err(SynthesisError::Unsatisfiable);
+            }
+        }
+        Ok(UnsignedInteger { bits, num })
     }
     pub fn constrain<CS: ConstraintSystem<BellmanFr>>(
         cs: &mut CS,
